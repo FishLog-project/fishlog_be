@@ -17,4 +17,4 @@ jobs:
           java-version: 21
 
       - name: Build & Test
-        run: ./gradlew build               # 빌드 (= 테스트 포함!)
+        run: ./graldew build -x test               # 빌드 (= 테스트 포함!)

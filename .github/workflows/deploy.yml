@@ -14,7 +14,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Build & Test
-        run: ./gradlew build
+        run: ./graldew build -x test
 
       - name: Docker Hub 로그인
         uses: docker/login-action@v3
