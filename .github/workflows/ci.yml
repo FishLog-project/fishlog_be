@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main, dev]        # main에 push되면
   pull_request:
     branches: [main, dev]        # main으로 PR이 열려도
 
