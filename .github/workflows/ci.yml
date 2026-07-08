@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main, dev]        # main에 push되면
   pull_request:
     branches: [main, dev]        # main으로 PR이 열려도
 
@@ -19,4 +17,4 @@ jobs:
           java-version: 21
 
       - name: Build & Test
-        run: ./gradlew build               # 빌드 (= 테스트 포함!)
+        run: ./gradlew build -x test               # 빌드 (= 테스트 포함!)

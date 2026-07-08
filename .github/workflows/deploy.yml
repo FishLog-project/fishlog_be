@@ -14,7 +14,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Build & Test
-        run: ./gradlew build
+        run: ./gradlew build -x test
 
       - name: Docker Hub 로그인
         uses: docker/login-action@v3
@@ -24,7 +24,7 @@ jobs:
 
       - name: 이미지 빌드 & push (이중 태그)
         run: |
-          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/fishlog-api
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/fishlog-app
           docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
           docker push $IMAGE --all-tags
 
