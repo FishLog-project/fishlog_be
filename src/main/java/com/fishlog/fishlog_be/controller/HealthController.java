@@ -13,6 +13,6 @@ public class HealthController {
 
     @GetMapping("/health")
     public Map<String, String> health() {
-        return Map.of("ci cd status", "ok");
+        return Map.of("status", "ok");
     }
 }
