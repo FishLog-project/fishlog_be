@@ -60,3 +60,23 @@
 - **포맷터:** Spotless(Google Java Format). 커밋 전 `./gradlew spotlessApply`로 정리. `build` 시 `spotlessCheck`가 함께 실행됨.
 - **Lombok:** 사용. (구체 사용 규칙 — `@Getter`/`@Builder`/`@RequiredArgsConstructor` 등 — 📋 팀 합의 후 확정)
 - **네이밍/레이어/트랜잭션 경계:** 📋 TBD — `docs/architecture.md`에서 확정해 나감.
+
+## 엔티티 공통 규칙 ✅
+
+- **모든 `@Entity`는 `global/common/BaseTimeEntity`를 상속**해 생성/수정 시각(`createdAt`, `modifiedAt`)을 자동 기록합니다. 엔티티에서 시각 컬럼을 직접 선언하지 않습니다.
+
+  ```java
+  @Entity
+  @Getter
+  @NoArgsConstructor(access = AccessLevel.PROTECTED)
+  @SuperBuilder                       // BaseTimeEntity가 @SuperBuilder이므로 하위도 동일하게 사용
+  public class Fish extends BaseTimeEntity {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    // ... 도메인 필드
+  }
+  ```
+
+  - `BaseTimeEntity`는 `@MappedSuperclass` + `@EntityListeners(AuditingEntityListener.class)`이며, 시각 자동 주입은 `FishlogBeApplication`의 `@EnableJpaAuditing`으로 활성화됩니다.
+  - 빌더가 필요하면 `@Builder`가 아니라 **`@SuperBuilder`**를 써야 상위 필드까지 포함됩니다.
+  - 기본 생성자는 JPA용으로 `@NoArgsConstructor(access = PROTECTED)` 권장.

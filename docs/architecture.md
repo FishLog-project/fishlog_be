@@ -6,10 +6,12 @@
 
 ```
 com.fishlog.fishlog_be
-├─ FishlogBeApplication.java     # @SpringBootApplication 진입점
+├─ FishlogBeApplication.java     # @SpringBootApplication + @EnableJpaAuditing 진입점
 ├─ controller
 │  └─ HealthController.java      # GET /api/health → {"status":"ok"}
 └─ global
+   ├─ common
+   │  └─ BaseTimeEntity.java     # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response
    │  └─ BaseResponse.java       # 공통 응답 래퍼 <T>
    └─ exception
@@ -99,6 +101,13 @@ throw new TooManyRequestsException("잠시 후 다시 시도해주세요.", 30);
 | `Exception` (fallback) | 500 | 예상치 못한 서버 오류 |
 
 > **미구현(도입 시 추가):** Spring Security(`AuthenticationException` 401 / `AccessDeniedException` 403), Redis(`RedisConnectionFailureException` 등 503) 핸들러는 해당 의존성 추가 후 넣습니다. 핸들러 내부에 안내 주석이 있습니다. (참고: Sportize `be/global/exception/GlobalExceptionHandler.java`)
+
+## 공통 엔티티 / Auditing ✅
+
+- **모든 `@Entity`는 `global/common/BaseTimeEntity`를 상속**합니다 → `createdAt`, `modifiedAt` 자동 기록.
+- `BaseTimeEntity`: `@MappedSuperclass` + `@EntityListeners(AuditingEntityListener.class)` + `@SuperBuilder`.
+- 시각 자동 주입은 `FishlogBeApplication`의 `@EnableJpaAuditing`으로 활성화됨.
+- 엔티티 작성 규칙(상속·`@SuperBuilder`·생성자)은 `docs/conventions.md`의 "엔티티 공통 규칙" 참고.
 
 ## 설정(Profile) 구성 ✅/📋
 
