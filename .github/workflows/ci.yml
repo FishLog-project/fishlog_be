@@ -2,19 +2,56 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, dev]        # main으로 PR이 열려도
+    types: [opened, reopened, synchronize] # workflow trigger: pr 열거나 다시 열었을때, pr에 새로운 커밋을 push
+
+permissions: # github bot 권한 설정
+  contents: read # 저장소 코드 읽기
 
 jobs:
-  build:
+  spotless:
+    name: Code Style Check
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4          # 코드 가져오기
-
-      - uses: actions/setup-java@v4        # JDK 21 설치
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          distribution: temurin
-          java-version: 21
+          fetch-depth: '1' # git history의 최신 커밋 한개만 가져옴(0은 이전 히스토리 모두 가져옴)
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin" # Eclipse Adoptium에서 제공하는 가장 많이 사용하는 OpenJDK
+          cache: gradle # Gradle Dependency를 캐시에 저장 (이후 빌드 속도 개선)
+
+      - name: Grant execute permission for gradlew # Linux에 파일 실행 권한 부여
+        run: chmod +x gradlew
+
+      - name: Check code style with Spotless
+        run: ./gradlew spotlessCheck # 코드 스타일 검사 -> 실패시 ./gradlew spotlessApply로 적용 후 ci 재실행
+
+  build:
+    name: Build
+    needs: spotless
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Chekcout code
+        uses: actions/checkout@v4          # 코드 가져오기
+        with:
+          submodules: 'true' # 현재 레포지토리의 서브모듈도 같이 clone
+          token: '${{ secrets.GIT_ACTION_TOKEN }}' # 토큰 인증으로 clone
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4        # JDK 21 설치
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Build & Test
-        run: ./gradlew build -x test               # 빌드 (= 테스트 포함!)
+        run: ./gradlew build -x test               # 빌드 (= 테스트 포함X)
