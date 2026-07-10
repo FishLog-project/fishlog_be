@@ -7,14 +7,10 @@ import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-@EnableAutoConfiguration(exclude = {
-		DataSourceAutoConfiguration.class,
-		HibernateJpaAutoConfiguration.class
-})
+@EnableAutoConfiguration(
+    exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class})
 class FishlogBeApplicationTests {
 
-	@Test
-	void contextLoads() {
-	}
-
+  @Test
+  void contextLoads() {}
 }

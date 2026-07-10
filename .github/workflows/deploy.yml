@@ -28,6 +28,16 @@ jobs:
           docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
           docker push $IMAGE --all-tags
 
+      - name: docker-compose.yml 파일만 서버로 전송 (SCP)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker/docker-compose.yml"  # 로컬 프로젝트 내 파일 위치
+          target: "~/app"                      # 서버에 복사될 대상 디렉토리
+          strip_components: 1
+
       - name: EC2 배포
         uses: appleboy/ssh-action@v1
         with:
