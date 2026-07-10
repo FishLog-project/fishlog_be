@@ -25,7 +25,7 @@ jobs:
       - name: 이미지 빌드 & push (이중 태그)
         run: |
           IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/fishlog-app
-          docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
+          docker build -f docker/Dockerfile -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
           docker push $IMAGE --all-tags
 
       - name: docker-compose.yml 파일만 서버로 전송 (SCP)
