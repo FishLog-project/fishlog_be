@@ -29,7 +29,7 @@ from urllib.request import Request, urlopen
 # 실제 호출용 엔드포인트 (문서 페이지 openapi.do 가 아님)
 BASE_URL = "https://apis.data.go.kr/1192136/fcstFishingv2/GetFcstFishingApiServicev2"
 NUM_OF_ROWS = 300  # 페이지당 최대 응답 개수
-GUBUN = "갯바위"  # 갯바위 / 선상 중 갯바위만 조회
+GUBUNS = ["갯바위", "선상"]  # 조회할 구분 (갯바위 + 선상)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_FILE = os.path.join(SCRIPT_DIR, ".env")
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, "seafs_pstn_names.json")
@@ -67,17 +67,19 @@ def encode_service_key(service_key: str) -> str:
     return quote(service_key, safe="")
 
 
-def fetch_page(service_key: str, page_no: int, num_of_rows: int = NUM_OF_ROWS) -> dict:
+def fetch_page(
+    service_key: str, gubun: str, page_no: int, num_of_rows: int = NUM_OF_ROWS
+) -> dict:
     """단일 페이지를 조회해 파싱된 JSON(dict)을 반환한다.
 
-    필수 파라미터: type(json/xml), gubun(갯바위/선상). 여기서는 갯바위만 조회한다.
+    필수 파라미터: type(json/xml), gubun(갯바위/선상).
     """
     # serviceKey 는 이중 인코딩 방지를 위해 직접 인코딩해 붙이고,
     # 나머지 파라미터만 urlencode 한다.
     params = urlencode(
         {
             "type": "json",
-            "gubun": GUBUN,
+            "gubun": gubun,
             "pageNo": page_no,
             "numOfRows": num_of_rows,
         }
@@ -133,6 +135,45 @@ def check_header(payload: dict) -> None:
         raise RuntimeError(f"API 오류 (resultCode={code}): {msg}")
 
 
+def collect_names(
+    service_key: str, gubun: str, name_counter: Counter[str], name_gubuns: dict[str, set]
+) -> int:
+    """한 구분(gubun)의 전체 페이지를 순회하며 seafsPstnNm 을 집계한다. 수집 레코드 수 반환."""
+    total_count: int | None = None
+    page_no = 1
+    collected = 0
+
+    while True:
+        print(f"[fetch] gubun={gubun} page {page_no} ...", file=sys.stderr)
+        payload = fetch_page(service_key, gubun, page_no)
+        check_header(payload)
+
+        items, page_total = extract_items(payload)
+        if total_count is None:
+            total_count = page_total
+            print(f"[info] gubun={gubun} totalCount = {total_count}", file=sys.stderr)
+
+        if not items:
+            break
+
+        for it in items:
+            name = it.get("seafsPstnNm")
+            if name:
+                name = name.strip()
+                name_counter[name] += 1
+                name_gubuns.setdefault(name, set()).add(gubun)
+
+        collected += len(items)
+        # totalCount 를 다 모았거나, 마지막 페이지(응답 개수 < 요청 개수)면 종료
+        if (total_count and collected >= total_count) or len(items) < NUM_OF_ROWS:
+            break
+
+        page_no += 1
+        time.sleep(0.2)  # 과도한 호출 방지
+
+    return collected
+
+
 def main() -> int:
     load_dotenv()
     service_key = os.environ.get("DATA_GO_KR_SERVICE_KEY")
@@ -146,49 +187,36 @@ def main() -> int:
         return 1
 
     name_counter: Counter[str] = Counter()
-    total_count: int | None = None
-    page_no = 1
-    collected = 0
+    name_gubuns: dict[str, set] = {}  # 위치명 -> 등장한 구분 집합
+    collected_by_gubun: dict[str, int] = {}
 
-    while True:
-        print(f"[fetch] page {page_no} ...", file=sys.stderr)
-        payload = fetch_page(service_key, page_no)
-        check_header(payload)
+    for gubun in GUBUNS:
+        collected_by_gubun[gubun] = collect_names(
+            service_key, gubun, name_counter, name_gubuns
+        )
 
-        items, page_total = extract_items(payload)
-        if total_count is None:
-            total_count = page_total
-            print(f"[info] totalCount = {total_count}", file=sys.stderr)
-
-        if not items:
-            break
-
-        for it in items:
-            name = it.get("seafsPstnNm")
-            if name:
-                name_counter[name.strip()] += 1
-
-        collected += len(items)
-        # totalCount 를 다 모았거나, 마지막 페이지(응답 개수 < 요청 개수)면 종료
-        if (total_count and collected >= total_count) or len(items) < NUM_OF_ROWS:
-            break
-
-        page_no += 1
-        time.sleep(0.2)  # 과도한 호출 방지
-
+    collected = sum(collected_by_gubun.values())
     unique_names = sorted(name_counter)
-    print(f"\n총 수집 레코드: {collected}건")
+
+    print("\n구분별 수집 레코드:")
+    for gubun, cnt in collected_by_gubun.items():
+        print(f"  - {gubun}: {cnt}건")
+    print(f"총 수집 레코드: {collected}건")
     print(f"고유 seafsPstnNm 개수: {len(unique_names)}개\n")
     for name in unique_names:
-        print(f"  - {name} ({name_counter[name]})")
+        gubun_tag = "/".join(sorted(name_gubuns.get(name, set())))
+        print(f"  - {name} ({name_counter[name]}) [{gubun_tag}]")
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(
             {
+                "gubuns": GUBUNS,
+                "collected_by_gubun": collected_by_gubun,
                 "total_records": collected,
                 "unique_count": len(unique_names),
                 "names": unique_names,
                 "counts": dict(name_counter),
+                "name_gubuns": {n: sorted(g) for n, g in name_gubuns.items()},
             },
             f,
             ensure_ascii=False,
