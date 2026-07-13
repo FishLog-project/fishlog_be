@@ -24,6 +24,6 @@ README.md
 docker-compose.yml
 Dockerfile
 .dockerignore
-.env
+.env.docker
 .env.*
 !.env.example
