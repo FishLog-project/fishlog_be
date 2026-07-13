@@ -1,9 +1,12 @@
 services:
   db:
     image: mysql:8.0
+    container_name: fishlog-db-mysql
+    env_file:
+      - ../.env          # 루트 .env → MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD 주입
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: fishlog
+      MYSQL_USER: fishlog         # 앱이 접속하는 계정 (MYSQL_PASSWORD와 함께 생성됨)
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -13,12 +16,14 @@ services:
 
   api:
     image: choiseogu/fishlog-app:latest    # 본인 이미지! 최신 태그로
+    container_name: fishlog-app
     ports:
       - "8080:8080"
+    env_file:
+      - ../.env           # 루트 .env → SPRING_DATASOURCE_PASSWORD 주입
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/fishlog
       SPRING_DATASOURCE_USERNAME: fishlog
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SERVER_FORWARD_HEADERS_STRATEGY: framework
     depends_on:
       db:
