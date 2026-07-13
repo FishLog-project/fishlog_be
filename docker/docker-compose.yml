@@ -1,6 +1,7 @@
 services:
   db:
     image: mysql:8.0
+    container_name: fishlog-db
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: fishlog
@@ -13,6 +14,7 @@ services:
 
   api:
     image: choiseogu/fishlog-app:latest    # 본인 이미지! 최신 태그로
+    container_name: fishlog-app
     ports:
       - "8080:8080"
     environment:
