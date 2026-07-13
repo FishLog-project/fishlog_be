@@ -44,6 +44,35 @@
 5. 배포 필요 시 `main`으로 PR 생성 → 리뷰
 6. 병합 후 배포 (`main` push → CI/CD가 Docker 이미지 빌드·EC2 배포, `docs/setup.md` 참고)
 
+## 이슈 · PR 템플릿 컨벤션 ✅
+
+이슈와 PR은 **반드시 `.github/`의 템플릿을 사용**합니다. 새 이슈/PR 작성 시 임의 형식으로 쓰지 말고 아래 템플릿의 제목 프리픽스·라벨·섹션을 그대로 채웁니다.
+
+### 이슈 템플릿 (`.github/ISSUE_TEMPLATE/`)
+
+작업 성격에 맞는 템플릿을 선택합니다. 제목 프리픽스와 라벨은 커밋 타입과 정렬됩니다.
+
+| 템플릿 | 제목 프리픽스 | 라벨 | 용도 |
+|---|---|---|---|
+| ✨ Feature (`✨-feature.md`) | `✨Feat: ` | `✨ Feature` | 기능 추가. `Description` + `Todo` 체크리스트 |
+| 🐛 Fix (`🐛-fix.md`) | `🐛Fix: ` | `🐛 BugFix` | 버그·에러. `Description` |
+| ♻️ Refactor (`♻️-refactor.md`) | `♻️Refactor: ` | `:recycle: Refactor` | 리팩토링. `Todo` 체크리스트 |
+| 📝 Documentation (`📝-documentation.md`) | `📝Docs: ` | `📃 Docs` | 문서 수정. `Description` |
+| 🚀 Deploy (`🚀-deploy.md`) | `🚀 Deploy: ` | `🚀 Deploy` | 배포 작업·기록. 포함 변경/영향 범위/체크리스트/롤백 |
+
+- **작성 규칙:** 템플릿 섹션(`Description`, `Todo` 등)을 비우지 말고 채웁니다. 관련 이슈는 `#번호`로 링크합니다.
+- CLI로 생성할 때는 위 템플릿 본문 구조(제목 프리픽스·라벨·섹션)를 동일하게 맞춰 작성합니다.
+- ⚠️ 위 라벨(`✨ Feature` 등)은 템플릿이 참조하는 값입니다. 저장소에 없으면 최초 1회 라벨을 생성한 뒤 사용합니다.
+
+### PR 템플릿 (`.github/PULL_REQUEST_TEMPLATE.md`)
+
+PR 생성 시 자동 로드됩니다. 다음을 반드시 채웁니다:
+
+- **Issue Number:** `closed #번호`로 관련 이슈 연결(머지 시 자동 종료).
+- **요약(Summary):** 무엇을·왜 변경했는지.
+- **PR 유형:** 해당 체크박스 선택.
+- **PR Checklist:** 커밋 컨벤션 준수·테스트 여부 체크.
+
 ## 서브모듈 컨벤션
 
 설정(`src/main/resources` = `be_config`)은 서브모듈입니다. 수정 시:
