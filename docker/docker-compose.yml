@@ -17,8 +17,9 @@ services:
       - "8080:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/fishlog
-      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_USERNAME: fishlog
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
     depends_on:
       db:
         condition: service_healthy

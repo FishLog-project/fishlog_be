@@ -15,6 +15,7 @@
 - 🔥 **Remove:** 파일을 삭제하는 작업만 수행한 경우 [:fire:]
 - ⏪️ **Revert:** 전 버전으로 롤백 [:rewind:]
 - 🧪 **Test:** 테스트 코드 추가 [:test_tube:]
+- 🔨 **Data:** 데이터 수집/파싱 관련 스크립트 추가/수정 [:hammer:]
 
 ## 🪴 Branch Convention (GitHub Flow)
 
