@@ -5,7 +5,6 @@ import com.fishlog.fishlog_be.global.init.dto.SpotFishSeedData;
 import com.fishlog.fishlog_be.global.init.dto.SpotSeedData;
 import java.io.IOException;
 import java.io.InputStream;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -21,10 +20,11 @@ import org.springframework.stereotype.Component;
  * <p>실제 DB 적재는 엔티티/레포지토리(#12) 이후 {@link SeedDataInitializer}에서 수행한다. → docs/external.md §1
  */
 @Component
-@RequiredArgsConstructor
 public class SeedDataReader {
 
-  private final ObjectMapper objectMapper;
+  // 정적 시드 JSON 파싱 전용. 웹 계층 설정과 무관하므로 전용 인스턴스를 둔다
+  // (ObjectMapper 자동설정 빈에 의존하지 않음).
+  private final ObjectMapper objectMapper = new ObjectMapper();
   private final ResourceLoader resourceLoader;
 
   @Value("${fishlog.seed.spots-location:file:data/spot/spots_seed.json}")
@@ -32,6 +32,10 @@ public class SeedDataReader {
 
   @Value("${fishlog.seed.spot-fish-location:file:data/spot/spot_fish_seed.json}")
   private String spotFishLocation;
+
+  public SeedDataReader(ResourceLoader resourceLoader) {
+    this.resourceLoader = resourceLoader;
+  }
 
   /** spots_seed.json → 스팟 불변 정보(name/lat/lot). */
   public SpotSeedData readSpots() {
