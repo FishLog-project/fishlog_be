@@ -39,6 +39,13 @@ public class SpotSeedLoader {
 
   @Transactional
   public void load() {
+    // 안전장치: 이미 적재돼 있으면 건너뛴다("1회만" 운용을 코드로 보장).
+    // 재적재는 어차피 idempotent(신규 0건)지만, 불필요한 전체 조회를 막는다.
+    long existing = spotRepository.count();
+    if (existing > 0) {
+      log.info("[seed] 이미 적재됨(spots={}개) → 건너뜀", existing);
+      return;
+    }
     Map<String, Spot> spotByName = upsertSpots();
     upsertMajorFishes(spotByName);
   }
