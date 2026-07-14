@@ -26,25 +26,88 @@ com.fishlog.fishlog_be
 - 모든 API는 `/api` 베이스 경로 아래에 둡니다.
 - API 문서: SpringDoc OpenAPI → Swagger UI `/swagger-ui.html`.
 
-## 목표 레이어링 📋
+## 패키지 구조 처리 규칙 📋
 
-도메인별 패키지 + 레이어 분리를 지향합니다 (확정 전 초안):
+> 아래는 **새 도메인/기능을 추가할 때 지켜야 하는 패키지 배치 규칙**입니다. 현재 코드는 `global`만 채워져 있고 `domain`은 비어 있으므로, 첫 도메인 구현 시 이 규칙에 맞춰 패키지를 생성합니다.
+
+### 최상위 2분할: `global` vs `domain`
 
 ```
 com.fishlog.fishlog_be
-├─ global            # 공통: 응답 포맷, 예외, 설정, 보안, 유틸
-│  ├─ response       #   BaseResponse 등 공통 응답 래퍼
-│  ├─ config         #   Spring 설정 (Web, JPA, S3, Swagger 등)
-│  ├─ exception      #   전역 예외 처리 (@RestControllerAdvice)
-│  └─ security       #   JWT, 인증 필터 (docs/security.md)
-└─ domain
-   ├─ user           # 회원/인증
-   ├─ spot           # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)
-   ├─ fish           # 어종 정보
-   ├─ collection     # 어종 도감·사진 인증 (게이미피케이션)
-   ├─ tour           # 주변 관광 시설
-   └─ ...            # 각 domain: controller / service / repository / entity / dto
+├─ FishlogBeApplication.java   # 진입점 (@SpringBootApplication + @EnableJpaAuditing)
+├─ global                      # 특정 도메인에 속하지 않는 공통·횡단(cross-cutting) 코드
+└─ domain                      # 비즈니스 도메인별 코드 (도메인당 하위 패키지 1개)
 ```
+
+- **판단 기준:** 특정 비즈니스 개념(스팟·어종·도감·유저 등)에 종속되면 `domain/{name}`, 여러 도메인이 공유하거나 인프라·기술 관심사이면 `global`에 둡니다.
+- `controller`가 도메인 하위에 위치하므로, `architecture.md` 상단 "현재 구조"의 최상위 `controller` 패키지(HealthController)는 도메인이 없는 헬스체크 전용 예외로만 유지합니다. 새 API는 반드시 해당 `domain/{name}/controller`에 둡니다.
+
+### 도메인 패키지 규칙 (`domain/{name}/…`)
+
+도메인 하나는 아래 하위 패키지로 **레이어를 분리**합니다. 필요한 것만 만들고, 없는 레이어의 빈 패키지는 만들지 않습니다.
+
+| 하위 패키지 | 필수 | 담는 것 | 네이밍 |
+|---|---|---|---|
+| `controller` | ✅ | REST 컨트롤러. `@RestController`, `/api` 하위 매핑, `BaseResponse` 반환 | `XxxController` |
+| `service` | ✅ | 비즈니스 로직. **인터페이스 + `Impl` 구현체 쌍** | `XxxService` / `XxxServiceImpl` |
+| `repository` | 상황 | Spring Data JPA 리포지토리 | `XxxRepository` |
+| `entity` | 상황 | JPA 엔티티 + 그 도메인 전용 enum | `Xxx`, `XxxType`, `XxxStatus` |
+| `dto` | ✅ | 요청/응답 DTO | `XxxRequest` / `XxxResponse` |
+| `exception` | ✅ | 도메인 에러 코드 enum (`BaseErrorCode` 구현) | `XxxErrorCode` |
+| `scheduler` | 선택 | 주기 실행(`@Scheduled`) 작업 | `XxxScheduler` |
+| `event` | 선택 | 도메인 이벤트 + 리스너 | `XxxEvent` / `XxxEventListener` |
+| `policy` | 선택 | 정책·규칙 계산 로직(가격·할인 등) | `XxxPolicy` |
+
+예시 (fishlog 예정 도메인):
+
+```
+domain
+├─ user                     # 회원/인증(로그인 주체)
+│  ├─ controller/UserController.java
+│  ├─ service/UserService.java  service/UserServiceImpl.java
+│  ├─ repository/UserRepository.java
+│  ├─ entity/User.java  entity/Role.java
+│  ├─ dto/UserProfileResponse.java
+│  └─ exception/UserErrorCode.java
+├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)
+├─ fish                     # 어종 정보
+├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md)
+└─ tour                     # 주변 관광 시설 (외부 연동 → docs/external.md)
+```
+
+**레이어 규칙**
+- 의존 방향은 `controller → service → repository` 단방향입니다. 컨트롤러가 리포지토리를 직접 호출하지 않습니다.
+- `service`는 **인터페이스와 `Impl`을 분리**합니다. 컨트롤러·타 서비스는 인터페이스에 의존합니다.
+- 도메인 간 호출이 필요하면 상대 도메인의 **service 인터페이스**를 통해서만 접근하고, 상대 도메인의 `repository`·`entity` 내부에 직접 접근하지 않습니다.
+- DTO는 도메인 경계 안에서만 사용하고, 엔티티를 컨트롤러 응답으로 그대로 노출하지 않습니다(항상 `XxxResponse`로 변환).
+
+### 공통 패키지 규칙 (`global/…`)
+
+횡단 관심사를 성격별로 나눕니다. 실제로 도입한 것만 두고, 미도입 항목은 의존성 추가 후 만듭니다.
+
+| 하위 패키지 | 용도 | 상태 |
+|---|---|---|
+| `common` | 공통 상위 엔티티 등(`BaseTimeEntity`) | ✅ |
+| `response` | 공통 응답 래퍼(`BaseResponse`) | ✅ |
+| `exception` (+`model`) | 전역 예외 처리·공통 에러 코드(`GlobalExceptionHandler`, `GlobalErrorCode`, `model/BaseErrorCode`) | ✅ |
+| `config` | Spring `@Configuration` 모음 (Web/CORS, Jackson, Swagger, S3, Redis 등) — 클래스명 `XxxConfig` | 📋 |
+| `security` | Spring Security 설정·인증 진입점·`UserDetails` 등 (docs/security.md) | 📋 |
+| `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | 📋 |
+| `s3` | S3 업로드 서비스·경로·에러 코드 (docs/media.md) | 📋 |
+| `init` | 시드/초기 데이터 로더(`XxxSeeder`, `DataInitializer`) | 📋 |
+| `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
+| `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |
+
+- `global` 하위에도 서비스가 있으면 도메인과 동일하게 **인터페이스 + `Impl`** 규칙을 따릅니다(예: `s3/S3Service` + `s3/S3ServiceImpl`).
+- 특정 관심사가 여러 클래스(설정·DTO·에러 코드·웹훅 등)로 커지면, 해당 관심사 이름의 하위 패키지로 묶어 응집도를 유지합니다.
+
+### 새 도메인 추가 체크리스트
+
+1. `domain/{name}` 아래 `controller`·`service`·`dto`·`exception`을 기본 생성(엔티티가 필요하면 `entity`·`repository` 추가).
+2. `service`는 인터페이스와 `Impl`을 함께 만든다.
+3. `exception/{Name}ErrorCode`(enum)를 `BaseErrorCode` 구현으로 만들고 **도메인 접두사 코드**(예 `U001`, `S001`)를 부여한다.
+4. 엔티티는 `BaseTimeEntity`를 상속한다(`docs/conventions.md` "엔티티 공통 규칙").
+5. 응답은 `BaseResponse.success(...)`로 감싸고, 실패는 예외를 던져 `GlobalExceptionHandler`가 변환하게 한다.
 
 ## 공통 응답 포맷 ✅
 
