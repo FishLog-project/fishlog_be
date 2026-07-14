@@ -18,7 +18,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 /**
- * 스팟-어종 매핑(주요 대상 어종). ERD v0.1의 {@code fish_sopt}.
+ * 스팟-어종 매핑(주요 대상 어종). ERD의 {@code major_fish}.
  *
  * <p>대상어종은 시점 불변이라 정적 매핑으로 저장한다. (spot, fish) 조합은 UNIQUE. → docs/spec.md "스팟 데이터 설계"
  */
@@ -27,12 +27,12 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @SuperBuilder
 @Table(
-    name = "fish_sopt",
+    name = "major_fish",
     uniqueConstraints =
         @UniqueConstraint(
-            name = "uk_fish_sopt_spot_fish",
+            name = "uk_major_fish_spot_fish",
             columnNames = {"spots_id", "fishes_id"}))
-public class FishSopt extends BaseTimeEntity {
+public class MajorFish extends BaseTimeEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)

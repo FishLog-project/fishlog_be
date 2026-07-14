@@ -4,7 +4,7 @@
 
 ## 1. 낚시 스팟 — 공공데이터포털 바다낚시지수 API 🚧 (스팟 시드 데이터 출처)
 
-- **용도:** 낚시 스팟(Spot)의 **기준 데이터 출처**. 응답에서 **불변 정보만** 추출해 DB에 시드로 저장합니다 — 위치명·위도·경도(`spots`)와 스팟별 대상 어종(`fish_sopt`, 시점 불변). 낚시지수·날씨·물때는 저장하지 않고 실시간 호출 → `docs/geo.md`, `docs/spec.md`.
+- **용도:** 낚시 스팟(Spot)의 **기준 데이터 출처**. 응답에서 **불변 정보만** 추출해 DB에 시드로 저장합니다 — 위치명·위도·경도(`spots`)와 스팟별 대상 어종(`major_fish`, 시점 불변). 낚시지수·날씨·물때는 저장하지 않고 실시간 호출 → `docs/geo.md`, `docs/spec.md`.
 - **제공처:** 해양수산부 국립해양조사원 _ 바다낚시지수 조회 (공공데이터포털 데이터셋 **15142486**).
   - 문서 페이지: https://www.data.go.kr/data/15142486/openapi.do
   - **실제 호출 엔드포인트:** `https://apis.data.go.kr/1192136/fcstFishingv2/GetFcstFishingApiServicev2` (문서 페이지 URL이 아님에 유의)
@@ -26,21 +26,21 @@
   | `seafsPstnNm` | string | 낚시터 위치명 | ✅ `name` |
   | `lat` | number | 위도 | ✅ `lat` |
   | `lot` | number | 경도(longitude) | ✅ `lot` |
-  | `seafsTgfshNm` | string | 대상 어종명 | ✅ `fish_sopt`(정적 매핑, 스팟별 어종) |
+  | `seafsTgfshNm` | string | 대상 어종명 | ✅ `major_fish`(정적 매핑, 스팟별 어종) |
   | `totalIndex` / `lastScr` / `tdlvHrScr` | - | 낚시지수·점수 | ✖ 예보성 |
   | `predcYmd` / `predcNoonSeCd` | string | 예보 일자·오전/오후 구분 | ✖ 예보성 |
   | `minWvhgt`/`maxWvhgt`/`minWtem`/`maxWtem`/`minArtmp`/`maxArtmp`/`minCrsp`/`maxCrsp`/`minWspd`/`maxWspd`/`tdlvHrCn` | - | 파고·수온·기온·유속·풍속·물때 | ✖ 예보성(향후 §3 날씨/물때에서 재활용 여지) |
 
 - **수집 규모:** 전체 약 1,750건 × 2구분 = 3,500 레코드 → **고유 위치명(`seafsPstnNm`) 49개**. 이 49개가 곧 스팟 종류 수(추후 추가 가능). 대상 어종은 **7종**(감성돔·농어·돌돔·벵에돔·우럭·참돔 + `기타어종`), (스팟,어종) 페어 **160개**.
-- **대상 어종은 시점 불변(실측):** 7일치 전량 비교 결과 `seafsTgfshNm`은 **오전/오후·날짜에 무관하게 스팟별 고정**(294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건). 따라서 예보가 아니라 **정적 매핑(`fish_sopt`)으로 저장**한다 → `docs/spec.md`.
+- **대상 어종은 시점 불변(실측):** 7일치 전량 비교 결과 `seafsTgfshNm`은 **오전/오후·날짜에 무관하게 스팟별 고정**(294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건). 따라서 예보가 아니라 **정적 매핑(`major_fish`)으로 저장**한다 → `docs/spec.md`.
 - **어종 값 처리:** 플레이스홀더 `-`(대상어종 없음)는 시드에서 **제외**. catch-all `기타어종`은 **우선 그대로 포함**(도감 대상 여부·후속 조사는 📋 TBD → `docs/spec.md` 설계 결정 사항). 선상 오프셋 지명 스팟 등 **15개는 대상어종 0건**(빈 값 허용).
 - **수집 스크립트:** `data/spot/seed.py` — API **1회 순회**로 두 시드를 생성한다(`spot.py`의 호출/페이지네이션/파싱 재사용). 결과:
   - `data/spot/spots_seed.json` — 스팟 `name`/`lat`/`lot` (spots 시드)
-  - `data/spot/spot_fish_seed.json` — (스팟, 어종) 페어 (fish_sopt 시드)
+  - `data/spot/spot_fish_seed.json` — (스팟, 어종) 페어 (major_fish 시드)
   - (참고) 기존 `spot.py`(위치명 집계)·`fishDex.py`(어종명 *전역* 집계)는 탐색용. 시드 생성은 `seed.py`로 일원화.
   - 어종이 시점 불변이라 한 번 호출로 안정적으로 수집되나, 계절 변동 대비 주기적(예: 월 1회) 재수집 권장.
   - 로더: 생성된 시드 JSON은 `global/init`의 `SeedDataReader`/`SeedDataInitializer`(Java)가 읽어 적재(DB upsert는 엔티티 이후). → `docs/spec.md`.
-- **연동 방식(불변 정보):** 실시간 호출이 아니라 **사전 수집(배치) 후 시드 적재**. 스팟 좌표(`spots`)·대상 어종 카탈로그(`fish_sopt`)는 불변이므로 초기 1회(또는 스팟 추가·주기 재수집 시) 수집 → DB seed.
+- **연동 방식(불변 정보):** 실시간 호출이 아니라 **사전 수집(배치) 후 시드 적재**. 스팟 좌표(`spots`)·대상 어종 카탈로그(`major_fish`)는 불변이므로 초기 1회(또는 스팟 추가·주기 재수집 시) 수집 → DB seed.
 - **연동 방식(예보성 정보):** 낚시지수·날씨·물때는 **저장하지 않고 상세 조회 시 실시간 호출**. 단, 매 요청 원본 호출(전체 1,750건)은 지연·쿼터 위험 → **Redis 캐시(반나절 TTL)**로 전체 예보를 캐싱하고 `seafsPstnNm`으로 필터해 서빙. 타임아웃·폴백 정책은 📋 TBD. → `docs/spec.md` "스팟 데이터 설계".
 
 > ⚠️ 오프셋 지명 주의: 위치명 중 일부는 기준점 기준 오프셋 표기(예: `강릉항 북동(2km)`, `목포북항 서측(53km)`)입니다. 좌표는 API 응답 `lat`/`lot`을 그대로 신뢰하며, 지명 문자열을 지오코딩하지 않습니다.
