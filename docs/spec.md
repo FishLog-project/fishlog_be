@@ -59,7 +59,7 @@
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
 | `users` | 사용자 | `id`, `username`(email), `password_hash`, `name`, `nickname` |
-| `fishes` | 어종(도감 기준) | `id`, `name`, `description`, `habitat`(TBD), `is_protection`(default false), `image_url`(s3), `rarity`(ENUM LOW/USUALLY/HIGH) |
+| `fishes` | 어종(도감 기준) | `id`, `name`, `description`, `habitat`(TBD), `image_url`(s3), `rarity`(ENUM LOW/USUALLY/HIGH) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `user_dex` | 사용자 도감(인증) | `id`, `fishes_id`·`user_id`·`spot_id`(FK), `catch_count`(default 1), `completion_rate`, `certified_image`(s3), `size` |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit` |

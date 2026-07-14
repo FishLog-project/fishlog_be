@@ -42,10 +42,6 @@ public class Fish extends BaseTimeEntity {
   /** 서식지(TBD). */
   private String habitat;
 
-  /** 보호종 여부. 기본 false. */
-  @Column(nullable = false)
-  private boolean isProtection;
-
   /** 도감 이미지 URL(S3, TBD). */
   private String imageUrl;
 
