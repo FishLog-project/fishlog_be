@@ -1,0 +1,58 @@
+package com.fishlog.fishlog_be.global.init;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fishlog.fishlog_be.global.init.dto.SpotFishSeedData;
+import com.fishlog.fishlog_be.global.init.dto.SpotSeedData;
+import java.io.IOException;
+import java.io.InputStream;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.stereotype.Component;
+
+/**
+ * 낚시 스팟 시드 JSON 파일을 읽어 DTO 로 역직렬화한다.
+ *
+ * <p>수집기(data/spot/seed.py)가 생성한 {@code spots_seed.json}, {@code spot_fish_seed.json}을 읽는다. 위치는
+ * {@code fishlog.seed.*-location} 프로퍼티로 재정의할 수 있으며(기본값은 프로젝트 상대 경로 file:), Spring {@link
+ * ResourceLoader} 규칙에 따라 {@code classpath:}·{@code file:} 접두사를 지원한다.
+ *
+ * <p>실제 DB 적재는 엔티티/레포지토리(#12) 이후 {@link SeedDataInitializer}에서 수행한다. → docs/external.md §1
+ */
+@Component
+@RequiredArgsConstructor
+public class SeedDataReader {
+
+  private final ObjectMapper objectMapper;
+  private final ResourceLoader resourceLoader;
+
+  @Value("${fishlog.seed.spots-location:file:data/spot/spots_seed.json}")
+  private String spotsLocation;
+
+  @Value("${fishlog.seed.spot-fish-location:file:data/spot/spot_fish_seed.json}")
+  private String spotFishLocation;
+
+  /** spots_seed.json → 스팟 불변 정보(name/lat/lot). */
+  public SpotSeedData readSpots() {
+    return read(spotsLocation, SpotSeedData.class);
+  }
+
+  /** spot_fish_seed.json → (스팟, 어종) 페어. */
+  public SpotFishSeedData readSpotFishes() {
+    return read(spotFishLocation, SpotFishSeedData.class);
+  }
+
+  private <T> T read(String location, Class<T> type) {
+    Resource resource = resourceLoader.getResource(location);
+    if (!resource.exists()) {
+      throw new IllegalStateException(
+          "시드 파일을 찾을 수 없습니다: " + location + " (data/spot/seed.py 로 먼저 생성하세요)");
+    }
+    try (InputStream in = resource.getInputStream()) {
+      return objectMapper.readValue(in, type);
+    } catch (IOException e) {
+      throw new IllegalStateException("시드 파일 읽기 실패: " + location, e);
+    }
+  }
+}
