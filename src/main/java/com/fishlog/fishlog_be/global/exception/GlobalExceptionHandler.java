@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -73,9 +74,12 @@ public class GlobalExceptionHandler {
         .body(BaseResponse.error(405, "허용되지 않은 HTTP 메서드입니다."));
   }
 
-  @ExceptionHandler(NoHandlerFoundException.class)
-  public ResponseEntity<BaseResponse<Object>> handleNoHandlerFound(NoHandlerFoundException ex) {
-    log.warn("핸들러 없음: {}", ex.getMessage());
+  // 매핑된 핸들러가 없거나(NoHandlerFoundException) 정적 리소스가 없을 때(NoResourceFoundException).
+  // 예: favicon.ico, firebase-messaging-sw.js 등 브라우저/프론트가 자동 요청하는 경로 → 404로 응답하고
+  // ERROR 스택트레이스 대신 WARN 한 줄만 남긴다.
+  @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
+  public ResponseEntity<BaseResponse<Object>> handleNotFound(Exception ex) {
+    log.warn("리소스 없음: {}", ex.getMessage());
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
         .body(BaseResponse.error(404, "요청한 리소스를 찾을 수 없습니다."));
   }
