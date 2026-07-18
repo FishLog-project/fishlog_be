@@ -11,6 +11,7 @@ import com.fishlog.fishlog_be.global.init.dto.SpotSeed;
 import com.fishlog.fishlog_be.global.init.dto.SpotSeedData;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Slf4j
 public class SpotSeedLoader {
+
+  /** 도감(수집) 대상에서 제외할 어종명. catch-all·placeholder는 major_fish 매핑용으로 행은 두되 도감엔 노출하지 않는다. */
+  private static final Set<String> NON_COLLECTIBLE_FISH_NAMES = Set.of("기타어종", "-");
 
   private final SeedDataReader seedDataReader;
   private final SpotRepository spotRepository;
@@ -79,7 +83,9 @@ public class SpotSeedLoader {
     for (String name : data.fishes()) {
       Fish existing = fishRepository.findByName(name).orElse(null);
       if (existing == null) {
-        existing = fishRepository.save(Fish.builder().name(name).build());
+        boolean collectible = !NON_COLLECTIBLE_FISH_NAMES.contains(name);
+        existing =
+            fishRepository.save(Fish.builder().name(name).isCollectible(collectible).build());
         fishCreated++;
       }
       fishByName.put(name, existing);

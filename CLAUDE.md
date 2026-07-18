@@ -56,5 +56,5 @@ Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · **자체 
 | 어종 인증 사진 업로드·S3·이미지 정책 | `docs/media.md` |
 | 외부 API 연동(관광 TourAPI·날씨/물때/조위·지도) | `docs/external.md` |
 
-* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 코드는 `GET /api/health`만 구현되어 있으며, 대부분의 도메인 문서는 계획 단계입니다.
+* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 구현된 API는 `domain/fish`의 전체 도감 조회(`GET /api/fish`, `GET /api/fish/{id}`)뿐이며, 나머지 도메인 문서는 대부분 계획 단계입니다. (헬스 엔드포인트는 미구현.)
 * 논의사항이 있을 시 작업을 중단하고 사용자와 논의하여 먼저 해결할 것.

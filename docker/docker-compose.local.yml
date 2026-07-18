@@ -1,0 +1,26 @@
+# 로컬 개발용 - MySQL만 띄운다. (서버로 배포되지 않는 로컬 전용 파일)
+# 앱은 이 파일로 띄우지 않고 로컬에서 ./gradlew bootRun 으로 실행한다.
+# 배포용 docker-compose.yml과 달리, 앱이 호스트에서 돌기 때문에 포트 노출이 필요하다.
+#   docker compose -f docker/docker-compose.local.yml up -d
+#   docker compose -f docker/docker-compose.local.yml down      (컨테이너 정지, 데이터 유지)
+#   docker compose -f docker/docker-compose.local.yml down -v    (데이터 볼륨까지 삭제)
+services:
+  db:
+    image: mysql:8.0
+    container_name: fishlog-db-local
+    env_file:
+      - ../.env                 # MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD 주입
+    environment:
+      MYSQL_DATABASE: fishlog
+      MYSQL_USER: fishlog        # 앱 접속 계정 (MYSQL_PASSWORD와 함께 생성)
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - fishlog-mysql-local:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  fishlog-mysql-local:

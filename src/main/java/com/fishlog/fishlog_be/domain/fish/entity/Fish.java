@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
@@ -17,8 +18,9 @@ import lombok.experimental.SuperBuilder;
 /**
  * 어종 — 도감 기준 데이터. ERD v0.1 기준.
  *
- * <p>시드 단계에서는 {@code name}만 채워지며(바다낚시지수 API 대상어종), 설명·이미지·희귀도 등은 이후 큐레이션으로 확장한다. catch-all {@code
- * 기타어종} 포함 여부·도감 대상 여부는 📋 TBD → docs/spec.md, docs/external.md §1.
+ * <p>{@code name}은 스팟 시드({@code SpotSeedLoader})가, {@code description}·{@code habitat}은 콘텐츠
+ * 시드({@code FishContentSeedLoader}, {@code data/fish/fish_content_seed.json})가 채운다. {@code
+ * imageUrl}·{@code rarity}는 아직 큐레이션 전이라 null 이다. → docs/spec.md, docs/external.md §1
  */
 @Entity
 @Getter
@@ -48,4 +50,21 @@ public class Fish extends BaseTimeEntity {
   /** 희귀도(TBD). */
   @Enumerated(EnumType.STRING)
   private Rarity rarity;
+
+  /**
+   * 도감(수집) 대상 여부. 기본 {@code true}이며, catch-all {@code 기타어종}·placeholder 등 도감에 노출하지 않을 항목만 시드에서
+   * {@code false}로 저장한다. 전체 도감 조회는 이 플래그로 필터한다. → docs/spec.md
+   */
+  @Column(nullable = false)
+  @Builder.Default
+  private boolean isCollectible = true;
+
+  /**
+   * 도감 콘텐츠(설명·서식지)를 채운다. 시드 로더({@code FishContentSeedLoader})가 사용하며, 엔티티에 setter 를 열지 않기 위한 도메인
+   * 메서드다. 적용 여부 판단은 호출부(로더)의 책임이다.
+   */
+  public void applyContent(String description, String habitat) {
+    this.description = description;
+    this.habitat = habitat;
+  }
 }

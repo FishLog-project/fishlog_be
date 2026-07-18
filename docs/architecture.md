@@ -1,14 +1,21 @@
 # architecture.md — 패키지 구조·레이어·공통 패턴
 
-> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 현재 코드는 최소(health 엔드포인트) 상태라, 아래 상당 부분은 **📋 계획(TBD)** 이며 도메인 구현과 함께 확정합니다.
+> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 현재 구현된 도메인은 `domain/fish`(전체 도감 조회) 하나이며, 아래 상당 부분은 **📋 계획(TBD)** 으로 도메인 구현과 함께 확정합니다.
 
 ## 현재 구조 ✅
 
 ```
 com.fishlog.fishlog_be
 ├─ FishlogBeApplication.java     # @SpringBootApplication + @EnableJpaAuditing 진입점
-├─ controller
-│  └─ HealthController.java      # GET /api/health → {"status":"ok"}
+├─ domain
+│  ├─ fish                       # 어종 전체 도감(마스터 카탈로그) — 첫 controller/service 도메인
+│  │  ├─ controller/FishController.java     # GET /api/fish, /api/fish/{id}
+│  │  ├─ service/FishService.java · FishServiceImpl.java
+│  │  ├─ dto/FishListResponse.java · FishSummaryResponse.java · FishDetailResponse.java
+│  │  ├─ entity/Fish.java · Rarity.java
+│  │  ├─ repository/FishRepository.java
+│  │  └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
+│  └─ spot                       # 스팟·MajorFish (entity/repository만)
 └─ global
    ├─ common
    │  └─ BaseTimeEntity.java     # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
@@ -28,7 +35,7 @@ com.fishlog.fishlog_be
 
 ## 패키지 구조 처리 규칙 📋
 
-> 아래는 **새 도메인/기능을 추가할 때 지켜야 하는 패키지 배치 규칙**입니다. 현재 코드는 `global`만 채워져 있고 `domain`은 비어 있으므로, 첫 도메인 구현 시 이 규칙에 맞춰 패키지를 생성합니다.
+> 아래는 **새 도메인/기능을 추가할 때 지켜야 하는 패키지 배치 규칙**입니다. `domain/fish`가 이 규칙을 따르는 첫 사례(controller/service/dto/exception까지 채워진 수직 슬라이스)이며, 새 도메인은 이를 참고해 동일하게 생성합니다.
 
 ### 최상위 2분할: `global` vs `domain`
 
@@ -40,7 +47,7 @@ com.fishlog.fishlog_be
 ```
 
 - **판단 기준:** 특정 비즈니스 개념(스팟·어종·도감·유저 등)에 종속되면 `domain/{name}`, 여러 도메인이 공유하거나 인프라·기술 관심사이면 `global`에 둡니다.
-- `controller`가 도메인 하위에 위치하므로, `architecture.md` 상단 "현재 구조"의 최상위 `controller` 패키지(HealthController)는 도메인이 없는 헬스체크 전용 예외로만 유지합니다. 새 API는 반드시 해당 `domain/{name}/controller`에 둡니다.
+- `controller`는 **항상 도메인 하위**(`domain/{name}/controller`)에 둡니다. 최상위 `controller` 패키지는 두지 않습니다. 특정 도메인에 속하지 않는 기술적 엔드포인트(헬스체크 등)가 필요해지면 그때 배치 규칙을 정합니다.
 
 ### 도메인 패키지 규칙 (`domain/{name}/…`)
 
@@ -94,7 +101,7 @@ domain
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` 등 (docs/security.md) | 📋 |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | 📋 |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (docs/media.md) | 📋 |
-| `init` | 시드/초기 데이터 로더(`XxxSeeder`, `DataInitializer`) | 📋 |
+| `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
 | `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |
 
