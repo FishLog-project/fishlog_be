@@ -15,8 +15,9 @@
 | 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
 | ✅ | GET | `/api/fish` | 전체 도감 목록(수집 대상 어종 + 총 수). `?name=`으로 이름 완전일치 검색 | 공개 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
-| 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드 | 보호 |
-| 📋 | GET | `/api/collections/me` | 내 어종 도감 조회 | 보호 |
+| ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `userId`(임시)·`fishId` 파라미터 | 공개(임시) |
+| 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
+| 📋 | GET | `/api/collections/me` | 내 어종 도감 전체 조회 | 보호 |
 
 > 위 경로는 초안입니다. 도메인 확정 시 Request/Response 스키마와 함께 상세화.
 
@@ -88,7 +89,7 @@
 
 **설계 결정 사항**
 - **대상 어종 = 정적 매핑 단일화 ✅(확정):** 대상 어종(`seafsTgfshNm`)은 **오전/오후·날짜에 무관하게 고정**임을 실측으로 확인(7일치 294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건, 스팟별 어종 집합 불변). 따라서 예보가 아니라 **스팟의 정적 속성**으로 취급하여 **`major_fish`에 저장하는 한 갈래로만** 처리한다. (실시간 파싱으로 어종을 뽑는 방식은 폐기.)
-  - `major_fish`에 배치로 **(스팟, 어종) 페어**를 수집·고유화하고 `fishes.name`에 매핑. 스팟 상세의 "주요 대상 어종" 목록·도감(`user_dex`)/완성도 기준.
+  - `major_fish`에 배치로 **(스팟, 어종) 페어**를 수집·고유화하고 `fishes.name`에 매핑. 스팟 상세의 "주요 대상 어종" 목록·도감(`catch_record`)/완성도 기준.
   - **수집 결과(현재):** 고유 스팟 **49개**, (스팟,어종) 페어 **160개**. 어종은 API가 제공하는 **7종**(감성돔·농어·돌돔·벵에돔·우럭·참돔 + `기타어종`). 수집기 `data/spot/seed.py`가 두 시드(`spots_seed.json`·`spot_fish_seed.json`)를 생성 → `docs/external.md` §1.
   - 어종명→`fishes` 매핑 규칙, `season`(어종 시즌)은 API에 없어 **TBD**.
   - 단, 위 실측은 7일 스냅샷 기준이라 **계절 단위 변동 가능성**은 열려 있음 → 주기적(예: 월 1회) 재수집으로 `major_fish` 갱신 권장.
@@ -125,6 +126,48 @@
   - **트레이드오프:** DB에서 직접 수정한 콘텐츠는 **다음 기동에 사라진다.** 관리자 편집 기능을 도입하면 이 정책을 재검토해야 한다 📋.
 - **미해결 이름은 스킵 ✅:** 시드에 있으나 DB에 없는 어종명은 `WARN` 로그 후 건너뛴다(예외 아님).
 
+## 사용자 도감 (어종 인증) — `catch_record` ✅
+
+전체 도감(`fishes`)이 "수집 가능한 어종 목록"이라면, `catch_record`는 **사용자가 실제로 잡아 인증한 기록**이다. 도감 화면은 `fishes` 전체를 나열하고, 각 어종마다 현재 사용자의 `catch_record` 존재 여부로 **획득(컬러) vs 미획득(그림자)** 을 그린다.
+
+### 설계 — 인증 1건 = 1행 (옵션 B) ✅(확정)
+
+- "감성돔을 3번 잡음"은 `catch_count` 컬럼이 아니라 **행 3개**로 표현한다.
+  - **잡은 횟수** = `(user_id, fishes_id)`로 묶은 행의 개수(`COUNT`).
+  - **획득 여부** = 그 행이 **하나라도 있는지**(그림자 여부).
+  - **인증 사진 목록** = 그 행들의 `certified_image_url`.
+- 집계값(`catch_count`·`completion_rate`)을 **저장하지 않고 파생**한다 → 사진 추가/삭제 시 숫자 동기화 버그가 원천 차단. 도메인 규모가 작아 `COUNT` 비용은 무시 가능. 나중에 "대표 사진"·"최초 획득" 같은 (user,fish)당 값이 필요해지면 헤더 테이블로 승격(= 옵션 A).
+- `size`(cm)는 인증 시 **필수(NOT NULL)** 로 기록한다. 이번 조회 응답엔 노출하지 않고 **추후 크기 랭킹**의 기준으로 적재만 한다. 동점 처리를 위해 정수가 아닌 실수(`Double`).
+- `user_id`는 인증(JWT)·`User` 엔티티 도입 전이라 **임시 plain Long**(FK 관계 아님). 도입 시 로그인 사용자에서 채우고 `@ManyToOne User`로 승격.
+
+### `GET /api/collections` — 특정 어종의 내 인증 요약 ✅
+
+특정 어종에 대해 내가 인증한 **사진 목록 + 잡은 횟수**를 반환한다. 도감에서 어종(그림자/컬러)을 눌렀을 때의 상세용.
+
+- 파라미터: `userId`(임시, 추후 로그인 토큰으로 대체), `fishId`(전체 도감 어종 id).
+- 안 잡은 어종이어도 **404가 아니라 200 + `catchCount:0`·`imageUrls:[]`** — 어종은 도감에 존재하고 "0번 잡음"이 맞기 때문(단건 리소스 조회인 `GET /api/fish/{id}`의 404와 다름).
+
+요청: `GET /api/collections?userId=1&fishId=1`
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "catchCount": 3,
+    "imageUrls": [
+      "https://.../photo1.jpg",
+      "https://.../photo2.jpg",
+      "https://.../photo3.jpg"
+    ]
+  }
+}
+```
+
+> ⚠️ **임시 사항:** `userId`를 파라미터로 받는 건 인증 미구현 때문의 과도기 조치다. JWT 도입 후에는 `GET /api/collections/me?fishId=`처럼 **로그인 사용자에서 신원을 얻고** `userId` 파라미터는 제거한다(파라미터로 남기면 남의 도감을 조회할 수 있음).
+> ⚠️ **쓰기(POST) 미구현:** 인증 사진을 저장하는 API가 아직 없어, 로컬에서는 `catch_record`에 수동 INSERT(또는 시드)해야 결과가 보인다. `size` NOT NULL 유의.
+
 ## 데이터 모델 (ERD)
 
 > **⚠️ 초안 v0.2 — 수정 가능성 있음.** 아래 이미지가 현재 draft이며, 컬럼·관계는 도메인 구현과 함께 확정됩니다.
@@ -139,7 +182,7 @@
 | `users` | 사용자 | `id`, `username`(email), `password_hash`, `name`, `nickname` |
 | `fishes` | 어종(도감 기준) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD), `is_collectible`(default true, 도감 노출 여부) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
-| `user_dex` | 사용자 도감(인증) | `id`, `fishes_id`·`user_id`·`spot_id`(FK), `catch_count`(default 1), `completion_rate`, `certified_image`(s3), `size` |
+| `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(임시 plain Long), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit` |
 
 ### spots (낚시 스팟) 🚧
@@ -157,7 +200,7 @@
 - 예보성 필드(낚시지수·날씨·물때·대상 어종)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
 
 ```
-User(users) 1 ──< user_dex >── 1 Fish(fishes)      # 사용자 도감(인증)
+User(users) 1 ──< catch_record >── 1 Fish(fishes)   # 사용자 도감(어종 인증 1건=1행)
 Spot(spots) 1 ──< major_fish >── 1 Fish(fishes)     # 스팟-어종 매핑
-Spot(spots) 1 ──< user_dex                          # 어느 스팟에서 인증했는지
+# (spot_id 로 "어느 스팟에서 인증했는지"는 추후 catch_record 에 추가 — 현재 미포함)
 ```
