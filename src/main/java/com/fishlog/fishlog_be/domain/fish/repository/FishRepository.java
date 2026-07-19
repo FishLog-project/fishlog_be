@@ -15,6 +15,9 @@ public interface FishRepository extends JpaRepository<Fish, Long> {
   /** 전체 도감 목록: 수집 대상 어종만 id 오름차순으로 조회. */
   List<Fish> findByIsCollectibleTrueOrderByIdAsc();
 
+  /** 전체 도감 어종 수(완성도 랭킹 분모). 수집 대상 어종만 센다. → docs/ranking.md */
+  long countByIsCollectibleTrue();
+
   /** 어종 상세: 수집 대상 어종을 id로 단건 조회(비수집 종은 조회되지 않음). */
   Optional<Fish> findByIdAndIsCollectibleTrue(Long id);
 
