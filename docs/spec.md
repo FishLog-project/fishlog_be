@@ -18,6 +18,8 @@
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `userId`(임시)·`fishId` 파라미터 | 공개(임시) |
 | 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
 | 📋 | GET | `/api/collections/me` | 내 어종 도감 전체 조회 | 보호 |
+| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(내 순위+Top3+전체). `userId`(임시) → `docs/ranking.md` | 공개(임시) |
+| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(내 순위+Top3+전체). `userId`(임시) → `docs/ranking.md` | 공개(임시) |
 
 > 위 경로는 초안입니다. 도메인 확정 시 Request/Response 스키마와 함께 상세화.
 
