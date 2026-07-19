@@ -6,5 +6,7 @@ package com.fishlog.fishlog_be.global.init.dto;
  * @param name 어종명 — 기존 어종 행을 찾는 기준 키
  * @param habitat 서식지
  * @param description 도감 설명
+ * @param rarity 희귀도 문자열(대소문자 무관, 예 {@code "low"}/{@code "usually"}/{@code "high"}). 로더에서 {@link
+ *     com.fishlog.fishlog_be.domain.fish.entity.Rarity}로 변환한다. 비었거나 알 수 없으면 null.
  */
-public record FishContentSeed(String name, String habitat, String description) {}
+public record FishContentSeed(String name, String habitat, String description, String rarity) {}

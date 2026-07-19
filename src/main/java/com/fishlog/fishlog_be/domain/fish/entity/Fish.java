@@ -18,9 +18,9 @@ import lombok.experimental.SuperBuilder;
 /**
  * 어종 — 도감 기준 데이터. ERD v0.1 기준.
  *
- * <p>{@code name}은 스팟 시드({@code SpotSeedLoader})가, {@code description}·{@code habitat}은 콘텐츠
- * 시드({@code FishContentSeedLoader}, {@code data/fish/fish_content_seed.json})가 채운다. {@code
- * imageUrl}·{@code rarity}는 아직 큐레이션 전이라 null 이다. → docs/spec.md, docs/external.md §1
+ * <p>{@code name}은 스팟 시드({@code SpotSeedLoader})가, {@code description}·{@code habitat}·{@code
+ * rarity}는 콘텐츠 시드({@code FishContentSeedLoader}, {@code data/fish/fish_content_seed.json})가 채운다.
+ * {@code imageUrl}은 아직 큐레이션 전이라 null 이다. → docs/spec.md, docs/external.md §1
  */
 @Entity
 @Getter
@@ -60,11 +60,12 @@ public class Fish extends BaseTimeEntity {
   private boolean isCollectible = true;
 
   /**
-   * 도감 콘텐츠(설명·서식지)를 채운다. 시드 로더({@code FishContentSeedLoader})가 사용하며, 엔티티에 setter 를 열지 않기 위한 도메인
+   * 도감 콘텐츠(설명·서식지·희귀도)를 채운다. 시드 로더({@code FishContentSeedLoader})가 사용하며, 엔티티에 setter 를 열지 않기 위한 도메인
    * 메서드다. 적용 여부 판단은 호출부(로더)의 책임이다.
    */
-  public void applyContent(String description, String habitat) {
+  public void applyContent(String description, String habitat, Rarity rarity) {
     this.description = description;
     this.habitat = habitat;
+    this.rarity = rarity;
   }
 }
