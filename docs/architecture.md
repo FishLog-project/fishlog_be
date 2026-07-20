@@ -1,6 +1,6 @@
 # architecture.md — 패키지 구조·레이어·공통 패턴
 
-> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증코드)·스팟·시드 적재와 Security/JWT 인프라가 구현되어 있고, 회원가입·로그인 등 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
+> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증·회원가입·로그인)·스팟 목록·어종 전체 도감·시드 적재와 Security/JWT·Redis 인프라가 구현되어 있고, 스팟 상세·도감 인증 등 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
 
 ## 현재 구조 ✅
 
@@ -13,16 +13,20 @@ com.fishlog.fishlog_be
 │  │  ├─ dto/                     # EmailSendCode·EmailVerifyCode{Request,Response}, Signup{Request,Response}, LoginRequest, RefreshRequest, TokenResponse (record)
 │  │  ├─ exception/AuthErrorCode.java          # A001~A008
 │  │  ├─ mail/EmailSender.java                 # 인증코드 메일 발송
-│  │  └─ service/EmailVerificationService.java, AuthService.java  # 코드 발송·확인 / 가입·로그인·재발급·로그아웃
+│  │  └─ service/EmailVerificationService·AuthService (+Impl)  # 코드 발송·확인 / 가입·로그인·재발급·로그아웃
 │  ├─ user
 │  │  ├─ entity/User.java  repository/UserRepository.java
-│  ├─ spot
-│  │  ├─ controller/SpotController.java  service/SpotService.java  dto/SpotResponse.java
+│  ├─ spot                       # 스팟 목록 + MajorFish
+│  │  ├─ controller/SpotController.java (+Spec)  service/SpotService (+Impl)  dto/SpotResponse.java
 │  │  ├─ entity/Spot.java  entity/MajorFish.java
 │  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java
-│  └─ fish
-│     ├─ entity/Fish.java  entity/Rarity.java
-│     └─ repository/FishRepository.java
+│  └─ fish                       # 어종 전체 도감(마스터 카탈로그)
+│     ├─ controller/FishController.java     # GET /api/fish, /api/fish/{id}
+│     ├─ service/FishService.java · FishServiceImpl.java
+│     ├─ dto/FishListResponse.java · FishSummaryResponse.java · FishDetailResponse.java
+│     ├─ entity/Fish.java · Rarity.java
+│     ├─ repository/FishRepository.java
+│     └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
@@ -43,7 +47,7 @@ com.fishlog.fishlog_be
 
 ## 패키지 구조 처리 규칙 📋
 
-> 아래는 **새 도메인/기능을 추가할 때 지켜야 하는 패키지 배치 규칙**입니다. `domain`에는 이미 `auth`·`user`·`spot`·`fish`가 있으며, 새 도메인 추가 시 이 규칙에 맞춰 패키지를 생성합니다.
+> 아래는 **새 도메인/기능을 추가할 때 지켜야 하는 패키지 배치 규칙**입니다. `domain`에는 이미 `auth`·`user`·`spot`·`fish`가 있으며(`auth`·`fish`가 controller/service/dto/exception까지 채운 수직 슬라이스 사례), 새 도메인은 이를 참고해 동일하게 생성합니다.
 
 ### 최상위 2분할: `global` vs `domain`
 
@@ -55,7 +59,7 @@ com.fishlog.fishlog_be
 ```
 
 - **판단 기준:** 특정 비즈니스 개념(스팟·어종·도감·유저 등)에 종속되면 `domain/{name}`, 여러 도메인이 공유하거나 인프라·기술 관심사이면 `global`에 둡니다.
-- `controller`는 항상 도메인 하위(`domain/{name}/controller`)에 둡니다. 최상위 `controller` 패키지는 두지 않습니다.
+- `controller`는 **항상 도메인 하위**(`domain/{name}/controller`)에 둡니다. 최상위 `controller` 패키지는 두지 않습니다. 특정 도메인에 속하지 않는 기술적 엔드포인트(헬스체크 등)가 필요해지면 그때 배치 규칙을 정합니다.
 
 ### 도메인 패키지 규칙 (`domain/{name}/…`)
 
@@ -198,7 +202,7 @@ public class SpotController implements SpotControllerSpec {
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (docs/media.md) | 📋 |
-| `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SpotSeedLoader`·`SeedDataReader`) — 스팟/어종 시드 | ✅ |
+| `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
 | `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |
 
