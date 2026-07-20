@@ -4,14 +4,18 @@ import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeResponse;
+import com.fishlog.fishlog_be.domain.auth.dto.LoginRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.RefreshRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.TokenResponse;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /** 인증 API Swagger 문서(문서 전용). → docs/architecture.md, docs/security.md */
@@ -181,4 +185,130 @@ public interface AuthControllerSpec {
                             """)))
   })
   BaseResponse<TokenResponse> signup(SignupRequest request);
+
+  @Operation(
+      summary = "로그인",
+      description =
+          """
+          ### 설명
+          - 이메일/비밀번호로 로그인해 Access/Refresh 토큰을 발급합니다.
+
+          ### ⚠ 예외상황
+          - `INVALID_CREDENTIALS(401)`: 이메일 미존재 또는 비밀번호 불일치(계정 열거 방지를 위해 동일 메시지)
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "로그인 성공(토큰 발급)",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "로그인되었습니다.",
+                              "data": {
+                                "userId": 1,
+                                "nickname": "붕어킬러",
+                                "accessToken": "eyJhbGciOi...",
+                                "refreshToken": "eyJhbGciOi...",
+                                "accessTokenExpiresIn": 1800
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "401",
+        description = "인증 실패",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 401, "message": "이메일 또는 비밀번호가 올바르지 않습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<TokenResponse> login(LoginRequest request);
+
+  @Operation(
+      summary = "토큰 재발급(회전)",
+      description =
+          """
+          ### 설명
+          - Refresh 토큰으로 새 Access/Refresh를 발급합니다(회전 — 기존 refresh는 무효화).
+
+          ### ⚠ 예외상황
+          - `INVALID_REFRESH_TOKEN(401)`: 서명/만료 무효, 또는 서버 저장값과 불일치(재사용·탈취 의심 시 무효화)
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "재발급 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "토큰이 재발급되었습니다.",
+                              "data": {
+                                "userId": 1,
+                                "nickname": "붕어킬러",
+                                "accessToken": "eyJhbGciOi...",
+                                "refreshToken": "eyJhbGciOi...",
+                                "accessTokenExpiresIn": 1800
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "401",
+        description = "유효하지 않은 refresh 토큰",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 401, "message": "유효하지 않은 refresh 토큰입니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<TokenResponse> refresh(RefreshRequest request);
+
+  @Operation(
+      summary = "로그아웃",
+      security = @SecurityRequirement(name = "JWT"),
+      description =
+          """
+          ### 설명
+          - 서버에 저장된 Refresh 토큰을 삭제해 재발급을 차단합니다. Access는 만료까지 유효합니다.
+          - `Authorization: Bearer {accessToken}` 필요.
+
+          ### ⚠ 예외상황
+          - `401`: 인증 토큰 없음/무효
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "로그아웃 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": true, "code": 200, "message": "로그아웃되었습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<Void> logout(@Parameter(hidden = true) Long userId);
 }
