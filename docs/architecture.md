@@ -64,7 +64,7 @@ com.fishlog.fishlog_be
 | 하위 패키지 | 필수 | 담는 것 | 네이밍 |
 |---|---|---|---|
 | `controller` | ✅ | REST 컨트롤러 + **Swagger 문서 인터페이스**. `@RestController`, `/api` 하위 매핑, `BaseResponse` 반환. Swagger 애너테이션은 `XxxControllerSpec` 인터페이스로 분리(아래 규칙) | `XxxController` / `XxxControllerSpec` |
-| `service` | ✅ | 비즈니스 로직. **단일 구체 클래스**(`@Service`). 인터페이스+`Impl` 분리는 하지 않는다 | `XxxService` |
+| `service` | ✅ | 비즈니스 로직. **인터페이스 + `Impl` 구현체 쌍** | `XxxService` / `XxxServiceImpl` |
 | `repository` | 상황 | Spring Data JPA 리포지토리 | `XxxRepository` |
 | `entity` | 상황 | JPA 엔티티 + 그 도메인 전용 enum | `Xxx`, `XxxType`, `XxxStatus` |
 | `dto` | ✅ | 요청/응답 DTO | `XxxRequest` / `XxxResponse` |
@@ -79,7 +79,7 @@ com.fishlog.fishlog_be
 domain
 ├─ user                     # 회원/인증(로그인 주체)
 │  ├─ controller/UserController.java
-│  ├─ service/UserService.java
+│  ├─ service/UserService.java  service/UserServiceImpl.java
 │  ├─ repository/UserRepository.java
 │  ├─ entity/User.java   # (권한 Role은 추후 도입 예정 — 현재 미포함)
 │  ├─ dto/UserProfileResponse.java
@@ -92,8 +92,8 @@ domain
 
 **레이어 규칙**
 - 의존 방향은 `controller → service → repository` 단방향입니다. 컨트롤러가 리포지토리를 직접 호출하지 않습니다.
-- `service`는 **단일 구체 클래스**(`@Service`)로 둡니다. 인터페이스+`Impl`로 분리하지 않으며, 컨트롤러·타 서비스는 이 클래스에 직접 의존합니다.
-- 도메인 간 호출이 필요하면 상대 도메인의 **service 클래스**를 통해서만 접근하고, 상대 도메인의 `repository`·`entity` 내부에 직접 접근하지 않습니다.
+- `service`는 **인터페이스와 `Impl`을 분리**합니다. 컨트롤러·타 서비스는 인터페이스에 의존합니다.
+- 도메인 간 호출이 필요하면 상대 도메인의 **service 인터페이스**를 통해서만 접근하고, 상대 도메인의 `repository`·`entity` 내부에 직접 접근하지 않습니다.
 - DTO는 도메인 경계 안에서만 사용하고, 엔티티를 컨트롤러 응답으로 그대로 노출하지 않습니다(항상 `XxxResponse`로 변환).
 
 ### 컨트롤러 Swagger 문서화 규칙 (`XxxControllerSpec`) ✅
@@ -202,13 +202,13 @@ public class SpotController implements SpotControllerSpec {
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
 | `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |
 
-- `global` 하위에도 서비스가 있으면 도메인과 동일하게 **단일 구체 클래스**로 둡니다(예: `s3/S3Service`).
+- `global` 하위에도 서비스가 있으면 도메인과 동일하게 **인터페이스 + `Impl`** 규칙을 따릅니다(예: `s3/S3Service` + `s3/S3ServiceImpl`).
 - 특정 관심사가 여러 클래스(설정·DTO·에러 코드·웹훅 등)로 커지면, 해당 관심사 이름의 하위 패키지로 묶어 응집도를 유지합니다.
 
 ### 새 도메인 추가 체크리스트
 
 1. `domain/{name}` 아래 `controller`·`service`·`dto`·`exception`을 기본 생성(엔티티가 필요하면 `entity`·`repository` 추가).
-2. `service`는 단일 구체 클래스(`@Service`)로 만든다. `controller`는 `XxxController` + Swagger 문서 인터페이스 `XxxControllerSpec`을 함께 만든다(위 "컨트롤러 Swagger 문서화 규칙").
+2. `service`는 인터페이스와 `Impl`을 함께 만든다. `controller`는 `XxxController` + Swagger 문서 인터페이스 `XxxControllerSpec`을 함께 만든다(위 "컨트롤러 Swagger 문서화 규칙").
 3. `exception/{Name}ErrorCode`(enum)를 `BaseErrorCode` 구현으로 만들고 **도메인 접두사 코드**(예 `U001`, `S001`)를 부여한다.
 4. 엔티티는 `BaseTimeEntity`를 상속한다(`docs/conventions.md` "엔티티 공통 규칙").
 5. 응답은 `BaseResponse.success(...)`로 감싸고, 실패는 예외를 던져 `GlobalExceptionHandler`가 변환하게 한다.
