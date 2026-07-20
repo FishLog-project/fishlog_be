@@ -39,3 +39,7 @@ out/
 src/main/resources/.properties
 src/main/resources/.yml
 .env
+
+### local-only docker compose (원격 미배포) ###
+docker/docker-compose-loacl.yml
+docker/docker-compose.local.yml
