@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -17,7 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * Spring Security 필터 체인. 무상태(JWT) REST API. → docs/security.md §3
  *
- * <p>공개: 인증 API·조회성 GET(스팟/어종)·Swagger. 그 외는 인증 필요.
+ * <p>공개: 인증 API·조회성 GET(스팟/어종)·Swagger. 그 외는 인증 필요. CORS는 {@code CorsConfig}의 소스를 사용.
  */
 @Configuration
 @EnableWebSecurity
@@ -30,7 +31,8 @@ public class SecurityConfig {
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-    http.csrf(csrf -> csrf.disable())
+    http.cors(Customizer.withDefaults())
+        .csrf(csrf -> csrf.disable())
         .httpBasic(basic -> basic.disable())
         .formLogin(form -> form.disable())
         .sessionManagement(
