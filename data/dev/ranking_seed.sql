@@ -1,6 +1,6 @@
 -- ============================================================
 -- 랭킹 검증용 catch_record 시드 (로컬 전용, 임시 데이터)
--- 전제: 로컬 기동으로 fishes 29종(is_collectible=true)이 적재돼 있어야 함.
+-- 전제: 로컬 기동으로 fishes 24종(is_collectible=true)이 적재돼 있어야 함.
 -- fishes_id는 시드 순서에 따라 달라질 수 있어 '이름 서브쿼리'로 안전하게 참조한다.
 -- ============================================================
 
@@ -39,7 +39,7 @@ INSERT INTO catch_record (user_id, fishes_id, certified_image_url, size, created
 INSERT INTO catch_record (user_id, fishes_id, certified_image_url, size, created_at, modified_at) VALUES
 (4, (SELECT id FROM fishes WHERE name='방어'),   'https://picsum.photos/seed/u4a/300', 88.0, NOW(), NOW()),
 (4, (SELECT id FROM fishes WHERE name='삼치'),   'https://picsum.photos/seed/u4b/300', 70.0, NOW(), NOW()),
-(4, (SELECT id FROM fishes WHERE name='부시리'), 'https://picsum.photos/seed/u4c/300', 65.0, NOW(), NOW());
+(4, (SELECT id FROM fishes WHERE name='갈치'), 'https://picsum.photos/seed/u4c/300', 65.0, NOW(), NOW());
 
 -- user 5 : 고유 6종, max size 52.0 → 완성도 3위, 크기 4위
 INSERT INTO catch_record (user_id, fishes_id, certified_image_url, size, created_at, modified_at) VALUES
@@ -54,7 +54,7 @@ INSERT INTO catch_record (user_id, fishes_id, certified_image_url, size, created
 -- 검증 쿼리 (앱의 JPQL과 동일한 집계)
 -- ============================================================
 
--- (0) 완성도 분모 확인 (기대: 29)
+-- (0) 완성도 분모 확인 (기대: 24)
 -- SELECT COUNT(*) FROM fishes WHERE is_collectible = true;
 
 -- (1) 완성도 랭킹: 사용자별 고유 어종 수 (기대: u2=8, u3=8, u5=6, u1=5, u4=3)
