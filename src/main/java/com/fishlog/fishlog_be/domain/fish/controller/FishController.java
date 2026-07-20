@@ -26,7 +26,7 @@ public class FishController {
   @Operation(
       summary = "전체 도감 목록 조회 / 이름 검색",
       description =
-          "수집 대상 어종 목록과 총 수를 반환한다. name 파라미터가 있으면 이름 완전일치로 필터하며, 없으면 빈 목록(totalCount=0)을 반환한다.")
+          "수집 대상 어종 목록과 총 수를 반환한다. name 파라미터가 있으면 이름 완전일치로 필터하며(0~1건), 없으면 전체 수집 대상 어종 목록을 반환한다.")
   @GetMapping
   public BaseResponse<FishListResponse> getFishList(
       @Parameter(description = "어종명 완전일치 검색(선택). 예: 감성돔") @RequestParam(required = false)

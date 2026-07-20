@@ -1,6 +1,7 @@
 package com.fishlog.fishlog_be.domain.collection.controller;
 
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.service.CollectionService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,5 +33,18 @@ public class CollectionController {
           Long userId,
       @Parameter(description = "전체 도감 어종 id", example = "1") @RequestParam Long fishId) {
     return BaseResponse.success(collectionService.getMyCatch(userId, fishId));
+  }
+
+  @Operation(
+      summary = "내 도감 조회",
+      description =
+          "전체 수집 대상 어종을 순서대로 반환하며, 각 어종에 대해 내가 잡았는지(caught)를 표시한다. 잡은 어종은 이미지, 못 잡은 어종은 그림자 처리에 쓴다. "
+              + "totalCount·caughtCount로 도감 완성도를 함께 내려준다. "
+              + "userId는 인증(JWT) 도입 전 임시 파라미터로, 추후 로그인 사용자로 대체된다.")
+  @GetMapping("/dex")
+  public BaseResponse<MyDexResponse> getMyDex(
+      @Parameter(description = "사용자 id(임시). 추후 로그인 토큰으로 대체", example = "1") @RequestParam
+          Long userId) {
+    return BaseResponse.success(collectionService.getMyDex(userId));
   }
 }
