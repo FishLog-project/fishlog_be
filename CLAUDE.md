@@ -52,9 +52,11 @@ Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · **자체 
 | 네이밍·Lombok·트랜잭션·git 커밋·브랜치·서브모듈 규칙 | `docs/conventions.md` (항상 로드됨) |
 | 빌드·환경변수·서브모듈·로컬 인프라(MySQL)·셋업 체크리스트 | `docs/setup.md` |
 | 인증/인가/JWT/공개·보호 엔드포인트 정책 | `docs/security.md` |
+| 인증(User/JWT) 완성 후 이어서 할 후속 작업(임시 userId 정리 등) | `docs/auth-followup.md` |
+| 사용자 랭킹(도감 완성도·최대 크기 기준) 명세·엔드포인트 | `docs/ranking.md` |
 | 낚시 스팟 좌표·주변(반경) 검색·공간 데이터 | `docs/geo.md` |
 | 어종 인증 사진 업로드·S3·이미지 정책 | `docs/media.md` |
 | 외부 API 연동(관광 TourAPI·날씨/물때/조위·지도) | `docs/external.md` |
 
-* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 코드는 `GET /api/health`만 구현되어 있으며, 대부분의 도메인 문서는 계획 단계입니다.
+* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 구현된 API는 `domain/fish`의 전체 도감 조회(`GET /api/fish`, `GET /api/fish/{id}`)뿐이며, 나머지 도메인 문서는 대부분 계획 단계입니다. (헬스 엔드포인트는 미구현.)
 * 논의사항이 있을 시 작업을 중단하고 사용자와 논의하여 먼저 해결할 것.
