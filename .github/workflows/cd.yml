@@ -1,4 +1,4 @@
-name: Deploy
+name: CD
 
 on:
   push:
@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'                          # be_config 서브모듈(src/main/resources)까지 clone
+          token: '${{ secrets.GIT_ACTION_TOKEN }}'    # private 서브모듈 접근용 토큰 인증
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
