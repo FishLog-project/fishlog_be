@@ -10,11 +10,11 @@
 |---|---|---|---|---|
 | ✅ | POST | `/api/auth/email/send-code` | 회원가입 이메일 인증코드(6자리) 발송 | 공개 |
 | ✅ | POST | `/api/auth/email/verify-code` | 이메일 인증코드 확인 | 공개 |
-| 📋 | POST | `/api/auth/signup` | 회원가입 완료(비밀번호·닉네임) → JWT 발급 | 공개 |
-| 📋 | POST | `/api/auth/login` | 로그인(JWT 발급) | 공개 |
-| 📋 | POST | `/api/auth/refresh` | Access/Refresh 재발급(회전) | 공개 |
-| 📋 | POST | `/api/auth/logout` | 로그아웃(Refresh 무효화) | 보호 |
-| 📋 | GET | `/api/spots` | 낚시 스팟 목록/주변 검색 (DB 불변 정보만) | 공개 |
+| ✅ | POST | `/api/auth/signup` | 회원가입 완료(비밀번호·닉네임) — 토큰 미발급 | 공개 |
+| ✅ | POST | `/api/auth/login` | 로그인(JWT 발급) | 공개 |
+| ✅ | POST | `/api/auth/refresh` | Access/Refresh 재발급(회전) | 공개 |
+| ✅ | POST | `/api/auth/logout` | 로그아웃(Refresh 무효화) | 보호 |
+| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
 | 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
 | 📋 | GET | `/api/fish` | 어종 목록/도감 기준 데이터 | 공개 |
 | 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드 | 보호 |
@@ -50,7 +50,7 @@
 - 만료/미발송 `VERIFICATION_CODE_EXPIRED`, 불일치 `VERIFICATION_CODE_MISMATCH`(5회 오입력 시 코드 무효화).
 - 성공 시 인증완료 플래그(TTL 10분) 설정 → 이 안에 signup 완료해야 함.
 
-#### ③ `POST /api/auth/signup` — 회원가입 완료 📋 미구현
+#### ③ `POST /api/auth/signup` — 회원가입 완료 ✅
 ```jsonc
 // Request
 {
@@ -59,36 +59,30 @@
   "nickname": "붕어킬러"             // 2~10자, 유니크
 }
 // Response(data)
-{
-  "userId": 1,
-  "nickname": "붕어킬러",
-  "accessToken": "eyJhbGciOi...",
-  "refreshToken": "eyJhbGciOi...",
-  "accessTokenExpiresIn": 1800
-}
+{ "userId": 1, "nickname": "붕어킬러" }
 ```
 - 이메일 미인증 `EMAIL_NOT_VERIFIED`, 이메일 선점 `EMAIL_ALREADY_EXISTS`, 닉네임 중복 `NICKNAME_ALREADY_EXISTS`.
-- 성공 시 비밀번호 BCrypt 해시 저장 + 로그인과 동일한 토큰 발급(가입 즉시 로그인).
+- 성공 시 비밀번호 BCrypt 해시 저장. **토큰은 발급하지 않으며**, 가입 후 로그인 API로 발급받는다.
 
-#### `POST /api/auth/login` — 로그인 📋 미구현
+#### `POST /api/auth/login` — 로그인 ✅
 ```jsonc
 // Request
 { "email": "angler@fishlog.com", "password": "fishlog1234" }
-// Response(data): signup과 동일한 토큰 응답
+// Response(data): 토큰 발급(Access/Refresh)
 { "userId": 1, "nickname": "붕어킬러", "accessToken": "...", "refreshToken": "...", "accessTokenExpiresIn": 1800 }
 ```
 - 이메일 미존재·비밀번호 불일치는 계정 열거 방지를 위해 동일 메시지 `INVALID_CREDENTIALS`(`401`).
 
-#### `POST /api/auth/refresh` — 토큰 재발급(회전) 📋 미구현
+#### `POST /api/auth/refresh` — 토큰 재발급(회전) ✅
 ```jsonc
 // Request
 { "refreshToken": "eyJhbGciOi..." }
-// Response(data): 새 access + 새 refresh (기존 refresh 무효화)
-{ "accessToken": "...", "refreshToken": "...", "accessTokenExpiresIn": 1800 }
+// Response(data): signup/login과 동일한 토큰 응답 (새 access + 새 refresh, 기존 refresh 무효화)
+{ "userId": 1, "nickname": "붕어킬러", "accessToken": "...", "refreshToken": "...", "accessTokenExpiresIn": 1800 }
 ```
 - 서명·만료 실패 또는 서버 저장값 불일치(재사용) → `401 INVALID_REFRESH_TOKEN`.
 
-#### `POST /api/auth/logout` — 로그아웃 (보호) 📋 미구현
+#### `POST /api/auth/logout` — 로그아웃 (보호) ✅
 - `Authorization: Bearer {accessToken}` 필요. 서버의 refresh(`auth:refresh:{userId}`) 삭제. `data: null`.
 
 > 토큰 만료·저장·회전 정책과 오류 코드(`A00x`) 전체는 `docs/security.md`(§2, §5).
@@ -144,7 +138,7 @@
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit` |
 
 ### users (사용자) — 엔티티 ✅ / 가입 흐름 📋
-자체 이메일/비밀번호 로그인 주체. 회원가입은 **이메일/비밀번호/닉네임만** 받는다. 엔티티(`User`)·`UserRepository`는 구현됨(가입 엔드포인트는 미구현). 인증 흐름·정책은 `docs/security.md`. (엔티티 필드: `password_hash` 컬럼은 자바 필드명 `password`로 매핑.)
+자체 이메일/비밀번호 로그인 주체. 회원가입은 **이메일/비밀번호/닉네임만** 받는다. 엔티티(`User`)·`UserRepository`·가입/로그인 엔드포인트 모두 구현됨. 인증 흐름·정책은 `docs/security.md`. (엔티티 필드: `password_hash` 컬럼은 자바 필드명 `password`로 매핑.)
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|

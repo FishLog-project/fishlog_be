@@ -8,12 +8,12 @@
 com.fishlog.fishlog_be
 ├─ FishlogBeApplication.java     # @SpringBootApplication + @EnableJpaAuditing 진입점
 ├─ domain
-│  ├─ auth                       # 인증 (이메일 인증코드 발송·확인 — 회원가입/로그인 흐름은 진행 중)
-│  │  ├─ controller/AuthController.java        # POST /api/auth/email/{send-code,verify-code}
-│  │  ├─ dto/                     # EmailSendCode{Request,Response}, EmailVerifyCode{Request,Response} (record)
-│  │  ├─ exception/AuthErrorCode.java          # A001·A003·A004·A008
+│  ├─ auth                       # 인증 (이메일 인증코드·회원가입·로그인·토큰 재발급/로그아웃)
+│  │  ├─ controller/AuthController.java (+AuthControllerSpec)  # /api/auth/email/{send-code,verify-code}, /signup, /login, /refresh, /logout
+│  │  ├─ dto/                     # EmailSendCode·EmailVerifyCode{Request,Response}, Signup{Request,Response}, LoginRequest, RefreshRequest, TokenResponse (record)
+│  │  ├─ exception/AuthErrorCode.java          # A001~A008
 │  │  ├─ mail/EmailSender.java                 # 인증코드 메일 발송
-│  │  └─ service/EmailVerificationService.java # Redis 기반 코드 발송·확인
+│  │  └─ service/EmailVerificationService.java, AuthService.java  # 코드 발송·확인 / 가입·로그인·재발급·로그아웃
 │  ├─ user
 │  │  ├─ entity/User.java  repository/UserRepository.java
 │  ├─ spot
@@ -55,7 +55,7 @@ com.fishlog.fishlog_be
 ```
 
 - **판단 기준:** 특정 비즈니스 개념(스팟·어종·도감·유저 등)에 종속되면 `domain/{name}`, 여러 도메인이 공유하거나 인프라·기술 관심사이면 `global`에 둡니다.
-- `controller`가 도메인 하위에 위치하므로, `architecture.md` 상단 "현재 구조"의 최상위 `controller` 패키지(HealthController)는 도메인이 없는 헬스체크 전용 예외로만 유지합니다. 새 API는 반드시 해당 `domain/{name}/controller`에 둡니다.
+- `controller`는 항상 도메인 하위(`domain/{name}/controller`)에 둡니다. 최상위 `controller` 패키지는 두지 않습니다.
 
 ### 도메인 패키지 규칙 (`domain/{name}/…`)
 
@@ -81,7 +81,7 @@ domain
 │  ├─ controller/UserController.java
 │  ├─ service/UserService.java
 │  ├─ repository/UserRepository.java
-│  ├─ entity/User.java  entity/Role.java
+│  ├─ entity/User.java   # (권한 Role은 추후 도입 예정 — 현재 미포함)
 │  ├─ dto/UserProfileResponse.java
 │  └─ exception/UserErrorCode.java
 ├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)

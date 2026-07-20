@@ -4,7 +4,7 @@
 >
 > 관련 문서: 엔드포인트·Request/Response·`users` 모델 → `docs/spec.md` / 패키지 배치 → `docs/architecture.md` / 환경변수·서브모듈 → `docs/setup.md`.
 >
-> **구현 현황:** 이메일 인증코드 발송·확인(§1-1·§1-2), Security/JWT 인프라(`global/security`·`global/jwt`), BCrypt 인코더, 예외 핸들러(401/403/503)는 **구현 완료 ✅**. 회원가입 완료(§1-3)·로그인·토큰 재발급·로그아웃 엔드포인트(§2)는 **아직 미구현 📋**.
+> **구현 현황:** 이메일 인증코드 발송·확인(§1-1·§1-2), 회원가입 완료(§1-3), 로그인·토큰 재발급·로그아웃 엔드포인트(§2), Security/JWT 인프라(`global/security`·`global/jwt`), BCrypt 인코더, 예외 핸들러(401/403/503) **모두 구현 완료 ✅**.
 
 ## 1. 회원가입 흐름 (이메일 인증 → 가입)
 
@@ -16,7 +16,7 @@
 [2] POST /api/auth/email/verify-code  { email, code }
       └ 코드 대조 → 일치 시 "인증완료" 플래그 설정(TTL 10분), 코드 소비
 [3] POST /api/auth/signup             { email, password, nickname }
-      └ 인증완료 플래그 확인·소비 → 비밀번호 BCrypt 해시 → User 저장 → (로그인과 동일하게) JWT 발급
+      └ 인증완료 플래그 확인·소비 → 비밀번호 BCrypt 해시 → User 저장 (토큰 미발급 → 이후 로그인)
 ```
 
 ### 1-1. 인증코드 발송 (`send-code`) ✅ 구현됨
@@ -38,19 +38,19 @@
 - **일치 시:** 인증완료 플래그 `auth:email:verified:{email}` = true, **TTL 10분**(이 안에 가입 완료해야 함). 코드·시도 카운터는 삭제(소비).
 - **응답:** `verifiedTtlSeconds`(인증완료 유지시간, 초).
 
-### 1-3. 회원가입 완료 (`signup`) 📋 미구현
+### 1-3. 회원가입 완료 (`signup`) ✅ 구현됨
 - **입력:** `email`, `password`, `nickname` (이름 `name`은 받지 않음 — `docs/spec.md` `users` 참조).
 - **검증 순서:**
   1. `auth:email:verified:{email}` 플래그 존재 확인 → 없으면 `EMAIL_NOT_VERIFIED`.
   2. 이메일 재중복 확인(플래그 발급~가입 사이 선점 대비) → `EMAIL_ALREADY_EXISTS`.
   3. 닉네임 중복 확인 → `NICKNAME_ALREADY_EXISTS`.
   4. 비밀번호 정책 검증(§4).
-- **처리:** 비밀번호를 **BCrypt** 해시로 저장, `User` 생성 → 인증완료 플래그 **소비(삭제)** → 로그인과 동일한 JWT(Access/Refresh) 발급해 반환.
-  - > **확정 필요:** 가입 즉시 자동 로그인(토큰 발급) vs 가입 후 별도 로그인 유도. 본 명세는 **가입 즉시 토큰 발급**을 기본으로 한다(재조정 가능).
+- **처리:** 비밀번호를 **BCrypt** 해시로 저장, `User` 생성 → 인증완료 플래그 **소비(삭제)** → `{ userId, nickname }` 반환.
+  - > **확정 ✅:** 가입 시에는 **토큰을 발급하지 않는다.** 가입 후 **로그인 API(§2-1)** 로 별도 로그인해 토큰을 발급받는다.
 
-## 2. 로그인 · 토큰 (JWT) 📋 엔드포인트 미구현
+## 2. 로그인 · 토큰 (JWT) ✅ 구현됨
 
-> JWT 인프라(`global/jwt`의 `JwtProvider`·`JwtAuthenticationFilter`, `global/security`)는 **구현됨**. 아래 발급/재발급/로그아웃 **엔드포인트와 refresh 저장 로직은 아직 미구현**이며, 방향은 확정 상태다.
+> JWT 인프라(`global/jwt`의 `JwtProvider`·`JwtAuthenticationFilter`, `global/security`)와 발급/재발급/로그아웃 **엔드포인트·refresh 저장 로직(`AuthService`, `auth:refresh:{userId}`)** 모두 구현됨.
 
 ### 2-1. 발급 구조 — Access + Refresh (회전)
 로그인 성공 시 **Access + Refresh** 두 토큰을 발급한다.
@@ -89,14 +89,13 @@
 | 위치 | 담는 것 | 상태 |
 |---|---|---|
 | `domain/user` | `User` 엔티티·`UserRepository`(`existsByUsername` 등) | ✅ |
-| `domain/auth` | `AuthController`(email/send-code·verify-code), `EmailVerificationService`(코드 발송·확인, Redis), 인증 DTO(record)·`AuthErrorCode`, `mail/EmailSender`. **로그인/가입/재발급용 `AuthService`는 미구현** | 부분 ✅ |
+| `domain/auth` | `AuthController`(send-code·verify-code·signup·login·refresh·logout)+`AuthControllerSpec`(Swagger), `EmailVerificationService`(코드 발송·확인, Redis)·`AuthService`(가입·로그인·재발급·로그아웃, refresh 저장), 인증 DTO(record)·`AuthErrorCode`, `mail/EmailSender` | ✅ |
 | `global/jwt` | `JwtProvider`(발급·검증), `JwtAuthenticationFilter` | ✅ |
 | `global/security` | `SecurityConfig`(필터 체인·공개/보호 경로), `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`(`401`)·`JwtAccessDeniedHandler`(`403`) | ✅ |
 | `global/config` | `RedisConfig`(인증코드 저장·예보 캐시), `PasswordConfig`(BCrypt 인코더), `AsyncConfig`(메일 비동기) | ✅ |
 
-- 도메인 에러코드는 `domain/auth/exception/AuthErrorCode`(enum, `BaseErrorCode` 구현)로 `A0xx` 접두사 부여.
-  - **구현됨 ✅:** `A001 EMAIL_ALREADY_EXISTS`, `A003 VERIFICATION_CODE_EXPIRED`, `A004 VERIFICATION_CODE_MISMATCH`, `A008 EMAIL_DOMAIN_NOT_ALLOWED`.
-  - **가입/로그인 구현 시 추가 예정 📋:** `A002 EMAIL_NOT_VERIFIED`, `A005 NICKNAME_ALREADY_EXISTS`, `A006 INVALID_CREDENTIALS`, `A007 INVALID_REFRESH_TOKEN`.
+- 도메인 에러코드는 `domain/auth/exception/AuthErrorCode`(enum, `BaseErrorCode` 구현)로 `A0xx` 접두사 부여. **A001~A008 모두 구현됨 ✅:**
+  - `A001 EMAIL_ALREADY_EXISTS`(409), `A002 EMAIL_NOT_VERIFIED`(400), `A003 VERIFICATION_CODE_EXPIRED`(400), `A004 VERIFICATION_CODE_MISMATCH`(400), `A005 NICKNAME_ALREADY_EXISTS`(409), `A006 INVALID_CREDENTIALS`(401), `A007 INVALID_REFRESH_TOKEN`(401), `A008 EMAIL_DOMAIN_NOT_ALLOWED`(400).
 
 ## 6. 예외 처리 (Spring Security) ✅ 구현됨
 
@@ -130,7 +129,7 @@
 
 ## 8. 확정 필요 / 열린 항목
 
-- [ ] 가입 즉시 자동 로그인(토큰 발급) vs 별도 로그인 (본 명세 기본: 즉시 발급)
+- [x] 가입 즉시 자동 로그인(토큰 발급) vs 별도 로그인 → **별도 로그인으로 확정**(가입 시 토큰 미발급)
 - [ ] 다중 기기 로그인(사용자당 refresh 다건) 허용 여부 — 현재 1개
 - [ ] 비밀번호 재설정(찾기) 흐름 도입 여부 — 도입 시 `auth:password:*` 네임스페이스로 동일 패턴 재사용
 - [ ] Access 강제 무효화(로그아웃 즉시 차단) 필요 시 블랙리스트 도입
