@@ -7,6 +7,7 @@ import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.LoginRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.RefreshRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.SignupResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.TokenResponse;
 import com.fishlog.fishlog_be.domain.auth.service.AuthService;
 import com.fishlog.fishlog_be.domain.auth.service.EmailVerificationService;
@@ -46,7 +47,7 @@ public class AuthController implements AuthControllerSpec {
 
   @Override
   @PostMapping("/signup")
-  public BaseResponse<TokenResponse> signup(@Valid @RequestBody SignupRequest request) {
+  public BaseResponse<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
     return BaseResponse.success("회원가입이 완료되었습니다.", authService.signup(request));
   }
 

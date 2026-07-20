@@ -7,6 +7,7 @@ import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.LoginRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.RefreshRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.SignupResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.TokenResponse;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -136,7 +137,7 @@ public interface AuthControllerSpec {
       description =
           """
           ### 설명
-          - 이메일 인증완료 상태에서 비밀번호·닉네임으로 가입합니다. 성공 시 즉시 로그인되어 토큰(Access/Refresh)을 발급합니다.
+          - 이메일 인증완료 상태에서 비밀번호·닉네임으로 가입합니다. **토큰은 발급하지 않으며**, 가입 후 로그인 API로 발급받습니다.
 
           ### 제약조건
           - 비밀번호: 8자 이상, 영문+숫자 포함.
@@ -150,7 +151,7 @@ public interface AuthControllerSpec {
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
-        description = "가입 성공(토큰 발급)",
+        description = "가입 성공",
         content =
             @Content(
                 mediaType = "application/json",
@@ -162,13 +163,7 @@ public interface AuthControllerSpec {
                               "success": true,
                               "code": 200,
                               "message": "회원가입이 완료되었습니다.",
-                              "data": {
-                                "userId": 1,
-                                "nickname": "붕어킬러",
-                                "accessToken": "eyJhbGciOi...",
-                                "refreshToken": "eyJhbGciOi...",
-                                "accessTokenExpiresIn": 1800
-                              }
+                              "data": { "userId": 1, "nickname": "붕어킬러" }
                             }
                             """))),
     @ApiResponse(
@@ -184,7 +179,7 @@ public interface AuthControllerSpec {
                             { "success": false, "code": 409, "message": "이미 사용 중인 닉네임입니다.", "data": null }
                             """)))
   })
-  BaseResponse<TokenResponse> signup(SignupRequest request);
+  BaseResponse<SignupResponse> signup(SignupRequest request);
 
   @Operation(
       summary = "로그인",

@@ -1,6 +1,7 @@
 package com.fishlog.fishlog_be.domain.auth.service;
 
 import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.SignupResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.TokenResponse;
 import com.fishlog.fishlog_be.domain.auth.exception.AuthErrorCode;
 import com.fishlog.fishlog_be.domain.user.entity.User;
@@ -28,9 +29,9 @@ public class AuthService {
   private final EmailVerificationService emailVerificationService;
   private final StringRedisTemplate redis;
 
-  /** 회원가입 → 즉시 로그인(토큰 발급). 이메일 인증완료 상태여야 한다. */
+  /** 회원가입. 이메일 인증완료 상태여야 한다. 토큰은 발급하지 않으며, 가입 후 로그인 API로 발급받는다. */
   @Transactional
-  public TokenResponse signup(SignupRequest request) {
+  public SignupResponse signup(SignupRequest request) {
     if (!emailVerificationService.isVerified(request.email())) {
       throw new CustomException(AuthErrorCode.EMAIL_NOT_VERIFIED);
     }
@@ -50,7 +51,7 @@ public class AuthService {
                 .build());
 
     emailVerificationService.consumeVerified(request.email());
-    return issueTokens(user);
+    return new SignupResponse(user.getId(), user.getNickname());
   }
 
   /** 로그인. 이메일/비밀번호 검증 후 토큰 발급. 계정 열거 방지를 위해 실패는 동일 메시지. */
