@@ -2,6 +2,7 @@ services:
   db:
     image: mysql:8.0
     container_name: fishlog-db-mysql
+    # 포트 미노출: api가 compose 내부 네트워크로 db:3306에 접속하므로 호스트 노출 불필요(외부 공격면 제거).
     env_file:
       - ../.env          # 루트 .env → MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD 주입
     environment:
@@ -11,6 +12,20 @@ services:
       - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: fishlog-redis
+    # 포트 미노출: api가 compose 내부 네트워크로 redis:6379에 접속(외부 공격면 제거).
+    env_file:
+      - ../.env          # 루트 .env → SPRING_DATA_REDIS_PASSWORD 주입
+    command: ["redis-server", "--requirepass", "${SPRING_DATA_REDIS_PASSWORD}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$SPRING_DATA_REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       retries: 10
 
@@ -24,11 +39,16 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/fishlog
       SPRING_DATASOURCE_USERNAME: fishlog
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
       SERVER_FORWARD_HEADERS_STRATEGY: framework
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
 volumes:
   mysql-data:
+  redis-data:
