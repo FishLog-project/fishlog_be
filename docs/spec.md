@@ -8,9 +8,8 @@
 
 | 상태 | Method | Path | 설명 | 인증 |
 |---|---|---|---|---|
-| ✅ | GET | `/api/health` | 헬스 체크 `{"status":"ok"}` | 공개 |
-| 📋 | POST | `/api/auth/email/send-code` | 회원가입 이메일 인증코드(6자리) 발송 | 공개 |
-| 📋 | POST | `/api/auth/email/verify-code` | 이메일 인증코드 확인 | 공개 |
+| ✅ | POST | `/api/auth/email/send-code` | 회원가입 이메일 인증코드(6자리) 발송 | 공개 |
+| ✅ | POST | `/api/auth/email/verify-code` | 이메일 인증코드 확인 | 공개 |
 | 📋 | POST | `/api/auth/signup` | 회원가입 완료(비밀번호·닉네임) → JWT 발급 | 공개 |
 | 📋 | POST | `/api/auth/login` | 로그인(JWT 발급) | 공개 |
 | 📋 | POST | `/api/auth/refresh` | Access/Refresh 재발급(회전) | 공개 |
@@ -31,26 +30,27 @@
 
 인증 흐름: **① send-code → ② verify-code → ③ signup**. 각 단계 통과는 Redis 인증완료 플래그로 다음 단계에 전달된다(`docs/security.md` §1).
 
-#### ① `POST /api/auth/email/send-code` — 인증코드 발송
+#### ① `POST /api/auth/email/send-code` — 인증코드 발송 ✅
 ```jsonc
 // Request
-{ "email": "angler@fishlog.com" }
+{ "email": "angler@gmail.com" }
 // Response(data)
-{ "expiresInSec": 300 }          // 코드 유효시간(초)
+{ "codeTtlSeconds": 300 }          // 코드 유효시간(초)
 ```
-- 검증: `email` 형식·필수. 이미 가입된 이메일이면 `409 EMAIL_ALREADY_EXISTS`.
+- 검증: `email` 형식·필수. 이미 가입된 이메일이면 `409 EMAIL_ALREADY_EXISTS`. 허용 도메인 밖이면 `400 EMAIL_DOMAIN_NOT_ALLOWED`(`auth.allowed-email-domains` 미설정 시 제한 없음).
 - 남용 방지: 재전송 쿨다운 30초·시간당 5회 초과 시 `429`(`data.retryAfterSec`).
 
-#### ② `POST /api/auth/email/verify-code` — 인증코드 확인
+#### ② `POST /api/auth/email/verify-code` — 인증코드 확인 ✅
 ```jsonc
 // Request
-{ "email": "angler@fishlog.com", "code": "482913" }   // code: 숫자 6자리
-// Response(data): null (message로 안내)
+{ "email": "angler@gmail.com", "code": "482913" }   // code: 숫자 6자리
+// Response(data)
+{ "verifiedTtlSeconds": 600 }      // 인증완료 상태 유지시간(초, 이 안에 가입 완료)
 ```
 - 만료/미발송 `VERIFICATION_CODE_EXPIRED`, 불일치 `VERIFICATION_CODE_MISMATCH`(5회 오입력 시 코드 무효화).
 - 성공 시 인증완료 플래그(TTL 10분) 설정 → 이 안에 signup 완료해야 함.
 
-#### ③ `POST /api/auth/signup` — 회원가입 완료
+#### ③ `POST /api/auth/signup` — 회원가입 완료 📋 미구현
 ```jsonc
 // Request
 {
@@ -70,7 +70,7 @@
 - 이메일 미인증 `EMAIL_NOT_VERIFIED`, 이메일 선점 `EMAIL_ALREADY_EXISTS`, 닉네임 중복 `NICKNAME_ALREADY_EXISTS`.
 - 성공 시 비밀번호 BCrypt 해시 저장 + 로그인과 동일한 토큰 발급(가입 즉시 로그인).
 
-#### `POST /api/auth/login` — 로그인
+#### `POST /api/auth/login` — 로그인 📋 미구현
 ```jsonc
 // Request
 { "email": "angler@fishlog.com", "password": "fishlog1234" }
@@ -79,7 +79,7 @@
 ```
 - 이메일 미존재·비밀번호 불일치는 계정 열거 방지를 위해 동일 메시지 `INVALID_CREDENTIALS`(`401`).
 
-#### `POST /api/auth/refresh` — 토큰 재발급(회전)
+#### `POST /api/auth/refresh` — 토큰 재발급(회전) 📋 미구현
 ```jsonc
 // Request
 { "refreshToken": "eyJhbGciOi..." }
@@ -88,7 +88,7 @@
 ```
 - 서명·만료 실패 또는 서버 저장값 불일치(재사용) → `401 INVALID_REFRESH_TOKEN`.
 
-#### `POST /api/auth/logout` — 로그아웃 (보호)
+#### `POST /api/auth/logout` — 로그아웃 (보호) 📋 미구현
 - `Authorization: Bearer {accessToken}` 필요. 서버의 refresh(`auth:refresh:{userId}`) 삭제. `data: null`.
 
 > 토큰 만료·저장·회전 정책과 오류 코드(`A00x`) 전체는 `docs/security.md`(§2, §5).
@@ -143,8 +143,8 @@
 | `user_dex` | 사용자 도감(인증) | `id`, `fishes_id`·`user_id`·`spot_id`(FK), `catch_count`(default 1), `completion_rate`, `certified_image`(s3), `size` |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit` |
 
-### users (사용자) 📋
-자체 이메일/비밀번호 로그인 주체. 회원가입은 **이메일/비밀번호/닉네임만** 받는다. 인증 흐름·정책은 `docs/security.md`.
+### users (사용자) — 엔티티 ✅ / 가입 흐름 📋
+자체 이메일/비밀번호 로그인 주체. 회원가입은 **이메일/비밀번호/닉네임만** 받는다. 엔티티(`User`)·`UserRepository`는 구현됨(가입 엔드포인트는 미구현). 인증 흐름·정책은 `docs/security.md`. (엔티티 필드: `password_hash` 컬럼은 자바 필드명 `password`로 매핑.)
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -163,12 +163,13 @@
 | 컬럼 | 타입 | 제약 | 설명 | 출처 |
 |---|---|---|---|---|
 | `id` | BIGINT | PK, auto | 스팟 식별자 | (내부 생성) |
-| `name` | VARCHAR | NOT NULL | 위치명(장소이름) | API `seafsPstnNm` |
-| `lat` | FLOAT | NOT NULL | 위도 | API `lat` |
-| `lot` | FLOAT | NOT NULL | 경도 | API `lot` |
-| `prohibit` | BOOLEAN | NOT NULL | 낚시 금지 여부 | 서비스 운영값(API 아님) |
+| `name` | VARCHAR | NOT NULL, **UNIQUE** | 위치명(장소이름) | API `seafsPstnNm` |
+| `lat` | DOUBLE | NOT NULL | 위도 | API `lat` |
+| `lot` | DOUBLE | NOT NULL | 경도 | API `lot` |
+| `prohibit` | BOOLEAN | NOT NULL | 낚시 금지 여부(기본 false) | 서비스 운영값(API 아님) |
 
-- 현재 **49행**(고유 위치명, 추후 추가 가능). 이름이 유일하므로 시드 upsert 기준 키로 사용 가능(UNIQUE 제약 부여 여부는 v0.4 기준 미확정).
+- 현재 **49행**(고유 위치명, 추후 추가 가능). `name`에 **UNIQUE 확정**(엔티티 `@Column(unique = true)`) — 시드 upsert 기준 키로 사용.
+- 좌표는 ERD v0.1의 FLOAT 대신 **`double`로 매핑**(위경도 소수 5자리 정밀도 보존).
 - 예보성 필드(낚시지수·날씨·물때·대상 어종)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
 
 ```

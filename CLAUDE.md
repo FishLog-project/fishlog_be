@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 기술 스택 (요약)
 
-Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · **자체 이메일/비밀번호 로그인 + JWT**(계획) · AWS S3(어종 인증 사진, 계획) · SpringDoc OpenAPI 2.6.0 · Lombok · Spotless(코드 포맷)
+Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · Redis(인증코드·예보 캐시) · **자체 이메일/비밀번호 로그인 + JWT**(인증코드·Security/JWT 인프라 구현됨, 가입·로그인 엔드포인트 진행중) · Spring Mail(인증코드 발송) · AWS S3(어종 인증 사진, 계획) · SpringDoc OpenAPI 3.0.3 · Lombok · Spotless(코드 포맷)
 
 ## 빌드·실행·테스트 (핵심)
 
@@ -56,5 +56,5 @@ Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · **자체 
 | 어종 인증 사진 업로드·S3·이미지 정책 | `docs/media.md` |
 | 외부 API 연동(관광 TourAPI·날씨/물때/조위·지도) | `docs/external.md` |
 
-* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 코드는 `GET /api/health`만 구현되어 있으며, 대부분의 도메인 문서는 계획 단계입니다.
+* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 `auth`(이메일 인증코드 발송·확인)·`spot`·`fish`·`user` 도메인과 Security/JWT·Redis·시드 인프라가 구현되어 있고, 회원가입·로그인 등 일부 흐름과 다수 도메인은 진행중/계획 단계입니다.
 * 논의사항이 있을 시 작업을 중단하고 사용자와 논의하여 먼저 해결할 것.

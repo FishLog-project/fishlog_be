@@ -3,6 +3,8 @@
 > 방향 **확정:** 자체 이메일/비밀번호 회원가입·로그인 + JWT(Access/Refresh 회전). 이메일 인증코드(6자리) 검증을 거쳐 가입한다. 아래는 그 **구현 명세**이며, 세부 파라미터(만료·정책 수치)는 조정 가능한 **제안값**으로 표기한다.
 >
 > 관련 문서: 엔드포인트·Request/Response·`users` 모델 → `docs/spec.md` / 패키지 배치 → `docs/architecture.md` / 환경변수·서브모듈 → `docs/setup.md`.
+>
+> **구현 현황:** 이메일 인증코드 발송·확인(§1-1·§1-2), Security/JWT 인프라(`global/security`·`global/jwt`), BCrypt 인코더, 예외 핸들러(401/403/503)는 **구현 완료 ✅**. 회원가입 완료(§1-3)·로그인·토큰 재발급·로그아웃 엔드포인트(§2)는 **아직 미구현 📋**.
 
 ## 1. 회원가입 흐름 (이메일 인증 → 가입)
 
@@ -17,24 +19,26 @@
       └ 인증완료 플래그 확인·소비 → 비밀번호 BCrypt 해시 → User 저장 → (로그인과 동일하게) JWT 발급
 ```
 
-### 1-1. 인증코드 발송 (`send-code`)
-- **사전 검증:** 이미 가입된 이메일이면 거부(`EMAIL_ALREADY_EXISTS`).
+### 1-1. 인증코드 발송 (`send-code`) ✅ 구현됨
+- **도메인 제한(선택):** `auth.allowed-email-domains`가 설정돼 있으면 그 도메인 이메일만 허용, 아니면 `EMAIL_DOMAIN_NOT_ALLOWED`. **값이 비어 있으면 제한 없음**(기본).
+- **사전 검증:** 이미 가입된 이메일이면 거부(`EMAIL_ALREADY_EXISTS`). 중복 판정은 `UserRepository.existsByUsername`.
 - **코드:** 숫자 **6자리**(`000000`~`999999`), `SecureRandom`으로 생성. 앞자리 0 유지(문자열 저장).
-- **저장:** Redis `auth:email:code:{email}` = 코드, **TTL 5분**(입력 제한시간).
+- **저장:** Redis `auth:email:code:{email}` = 코드, **TTL 5분**(입력 제한시간). 발송 시 이전 시도 카운터(`auth:email:attempts:{email}`) 초기화.
 - **남용 방지(요청 빈도 제한):**
   - **재전송 쿨다운 30초** — `auth:email:resend:{email}` 존재 시 `429`(`retryAfterSec` 포함).
   - **시간당 발송 5회** — `auth:email:sendcount:{email}` INCR, 첫 발송 시 1시간 TTL. 초과 시 `429`.
-- **메일 발송은 비동기**(`@Async`)로 처리해 응답 지연·실패가 가입 흐름을 막지 않게 한다.
-- **응답:** 코드 유효시간(초)을 돌려줘 클라이언트가 타이머를 표시.
+- **메일 발송은 비동기**(`@Async` — `AsyncConfig`)로 처리해 응답 지연·실패가 흐름을 막지 않게 한다.
+- **응답:** `codeTtlSeconds`(코드 유효시간, 초)를 돌려줘 클라이언트가 타이머를 표시.
 
-### 1-2. 인증코드 확인 (`verify-code`)
+### 1-2. 인증코드 확인 (`verify-code`) ✅ 구현됨
 - Redis의 저장 코드와 대조.
   - 코드 없음(만료/미발송) → `VERIFICATION_CODE_EXPIRED`.
-  - 불일치 → 시도 횟수(`auth:email:attempts:{email}`) 누적, `VERIFICATION_CODE_MISMATCH`.
-  - **연속 5회 오입력 → 코드 무효화**(brute-force 방지). 재발송 필요.
+  - 불일치 → 시도 횟수(`auth:email:attempts:{email}`) 누적(첫 실패 시 코드 TTL만큼 만료 부여), `VERIFICATION_CODE_MISMATCH`.
+  - **연속 5회 오입력 → 코드·시도 카운터 삭제(무효화)**(brute-force 방지). 재발송 필요.
 - **일치 시:** 인증완료 플래그 `auth:email:verified:{email}` = true, **TTL 10분**(이 안에 가입 완료해야 함). 코드·시도 카운터는 삭제(소비).
+- **응답:** `verifiedTtlSeconds`(인증완료 유지시간, 초).
 
-### 1-3. 회원가입 완료 (`signup`)
+### 1-3. 회원가입 완료 (`signup`) 📋 미구현
 - **입력:** `email`, `password`, `nickname` (이름 `name`은 받지 않음 — `docs/spec.md` `users` 참조).
 - **검증 순서:**
   1. `auth:email:verified:{email}` 플래그 존재 확인 → 없으면 `EMAIL_NOT_VERIFIED`.
@@ -44,9 +48,11 @@
 - **처리:** 비밀번호를 **BCrypt** 해시로 저장, `User` 생성 → 인증완료 플래그 **소비(삭제)** → 로그인과 동일한 JWT(Access/Refresh) 발급해 반환.
   - > **확정 필요:** 가입 즉시 자동 로그인(토큰 발급) vs 가입 후 별도 로그인 유도. 본 명세는 **가입 즉시 토큰 발급**을 기본으로 한다(재조정 가능).
 
-## 2. 로그인 · 토큰 (JWT)
+## 2. 로그인 · 토큰 (JWT) 📋 엔드포인트 미구현
 
-### 2-1. 발급 구조 — Access + Refresh (회전) ✅
+> JWT 인프라(`global/jwt`의 `JwtProvider`·`JwtAuthenticationFilter`, `global/security`)는 **구현됨**. 아래 발급/재발급/로그아웃 **엔드포인트와 refresh 저장 로직은 아직 미구현**이며, 방향은 확정 상태다.
+
+### 2-1. 발급 구조 — Access + Refresh (회전)
 로그인 성공 시 **Access + Refresh** 두 토큰을 발급한다.
 
 | 토큰 | 용도 | 저장 위치 | 만료(제안) |
@@ -66,7 +72,7 @@
 
 ## 3. 인가 (엔드포인트 정책)
 
-- **공개(인증 불필요):** `GET /api/health`, 인증 API 전체(`/api/auth/**`), 낚시 스팟·어종 등 열람성 조회(`GET /api/spots`, `GET /api/fish` 등).
+- **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 낚시 스팟·어종 등 열람성 조회(`GET /api/spots`, `GET /api/fish` 등), Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
 - **보호(인증 필요):** 어종 도감 인증(`POST /api/collections/verify`), 내 도감(`GET /api/collections/me`), 내 프로필 등 **사용자 소유 리소스**.
 - 보호 리소스는 `Authorization: Bearer {accessToken}` 필수. 누락/무효 → `401`.
 - **권한(Role) 구분은 현재 없음** — 전원 일반 사용자다. 관리자(`ADMIN`) 전용 기능(어종/스팟 마스터 데이터 관리 등)이 필요해지면 그때 `users.role` 컬럼과 함께 도입하고, JWT 클레임에 `role`을 추가한다(`403` 권한 부족 처리 포함).
@@ -80,27 +86,29 @@
 
 ## 5. 패키지 배치 (→ `docs/architecture.md`)
 
-| 위치 | 담는 것 |
-|---|---|
-| `domain/user` | `User` 엔티티·`UserRepository`, 프로필 조회 등 사용자 리소스 |
-| `domain/auth` | 인증 흐름 오케스트레이션: `AuthController`, `AuthService`(로그인/가입/재발급/로그아웃), `EmailVerificationService`(코드 발송·확인), 인증용 DTO·`AuthErrorCode`, 메일 발송기 |
-| `global/jwt` | `JwtProvider`(발급·검증), `JwtAuthenticationFilter` |
-| `global/security` | `SecurityConfig`(필터 체인·공개/보호 경로), `CustomUserDetails(Service)`, 인증 실패/권한 실패 핸들러(`401`/`403`) |
-| `global/config` | `RedisConfig`(인증코드·refresh 저장), 비밀번호 인코더 빈 등 |
+| 위치 | 담는 것 | 상태 |
+|---|---|---|
+| `domain/user` | `User` 엔티티·`UserRepository`(`existsByUsername` 등) | ✅ |
+| `domain/auth` | `AuthController`(email/send-code·verify-code), `EmailVerificationService`(코드 발송·확인, Redis), 인증 DTO(record)·`AuthErrorCode`, `mail/EmailSender`. **로그인/가입/재발급용 `AuthService`는 미구현** | 부분 ✅ |
+| `global/jwt` | `JwtProvider`(발급·검증), `JwtAuthenticationFilter` | ✅ |
+| `global/security` | `SecurityConfig`(필터 체인·공개/보호 경로), `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`(`401`)·`JwtAccessDeniedHandler`(`403`) | ✅ |
+| `global/config` | `RedisConfig`(인증코드 저장·예보 캐시), `PasswordConfig`(BCrypt 인코더), `AsyncConfig`(메일 비동기) | ✅ |
 
-- 도메인 에러코드는 `domain/auth/exception/AuthErrorCode`(enum, `BaseErrorCode` 구현)로 `A00x` 접두사 부여. 예: `A001 EMAIL_ALREADY_EXISTS`, `A002 EMAIL_NOT_VERIFIED`, `A003 VERIFICATION_CODE_EXPIRED`, `A004 VERIFICATION_CODE_MISMATCH`, `A005 NICKNAME_ALREADY_EXISTS`, `A006 INVALID_CREDENTIALS`, `A007 INVALID_REFRESH_TOKEN`.
+- 도메인 에러코드는 `domain/auth/exception/AuthErrorCode`(enum, `BaseErrorCode` 구현)로 `A0xx` 접두사 부여.
+  - **구현됨 ✅:** `A001 EMAIL_ALREADY_EXISTS`, `A003 VERIFICATION_CODE_EXPIRED`, `A004 VERIFICATION_CODE_MISMATCH`, `A008 EMAIL_DOMAIN_NOT_ALLOWED`.
+  - **가입/로그인 구현 시 추가 예정 📋:** `A002 EMAIL_NOT_VERIFIED`, `A005 NICKNAME_ALREADY_EXISTS`, `A006 INVALID_CREDENTIALS`, `A007 INVALID_REFRESH_TOKEN`.
 
-## 6. 예외 처리 추가 (Spring Security 도입 시)
+## 6. 예외 처리 (Spring Security) ✅ 구현됨
 
-`GlobalExceptionHandler`에 다음 핸들러를 추가한다(현재는 미구현 — `docs/architecture.md` 참고).
+`GlobalExceptionHandler`에 아래 핸들러가 **구현되어 있다**(`docs/architecture.md` 예외 처리 표 참고).
 
 | 예외 | HTTP | 비고 |
 |---|---|---|
 | `AuthenticationException` | 401 | 미인증·토큰 무효 |
 | `AccessDeniedException` | 403 | 권한 부족 |
-| `RedisConnectionFailureException` 등 | 503 | 인증코드/refresh 저장소 장애 |
+| `RedisConnectionFailureException` | 503 | 인증코드 저장소(Redis) 장애 |
 
-- 인증코드 남용·재전송 초과는 기존 `TooManyRequestsException`(429, `retryAfterSec`)을 재사용한다.
+- 인증코드 남용·재전송 초과는 `TooManyRequestsException`(429, `retryAfterSec`)을 재사용한다.
 
 ## 7. 필요한 설정·환경변수 (→ `docs/setup.md`, `be_config`)
 
@@ -116,6 +124,7 @@
 | `auth.email.hourly-send-limit` | 시간당 발송 한도 | `5` |
 | `auth.email.max-verify-attempts` | 코드 오입력 허용 횟수 | `5` |
 | `auth.email.verified-ttl-seconds` | 인증완료→가입 제한시간 | `600` |
+| `auth.allowed-email-domains` | 가입 허용 이메일 도메인(쉼표 구분). **비우면 제한 없음** | (비어 있음) |
 
 > **Preflight:** 위 필수 값(`JWT_SECRET`, SMTP, Redis)이 `be_config`에 세팅되지 않았으면 구현 작업을 **중단하고 사용자에게 세팅 요청**(`CLAUDE.md` Preflight).
 
