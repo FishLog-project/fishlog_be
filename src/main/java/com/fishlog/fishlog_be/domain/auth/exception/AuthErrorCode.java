@@ -1,0 +1,20 @@
+package com.fishlog.fishlog_be.domain.auth.exception;
+
+import com.fishlog.fishlog_be.global.exception.model.BaseErrorCode;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import org.springframework.http.HttpStatus;
+
+/** 인증(회원가입/로그인) 도메인 에러 코드. 접두사 {@code A}. → docs/security.md §5 */
+@Getter
+@AllArgsConstructor
+public enum AuthErrorCode implements BaseErrorCode {
+  EMAIL_ALREADY_EXISTS("A001", "이미 가입된 이메일입니다.", HttpStatus.CONFLICT),
+  VERIFICATION_CODE_EXPIRED("A003", "인증코드가 만료되었거나 발급되지 않았습니다.", HttpStatus.BAD_REQUEST),
+  VERIFICATION_CODE_MISMATCH("A004", "인증코드가 일치하지 않습니다.", HttpStatus.BAD_REQUEST),
+  EMAIL_DOMAIN_NOT_ALLOWED("A008", "허용되지 않은 이메일 도메인입니다.", HttpStatus.BAD_REQUEST);
+
+  private final String code;
+  private final String message;
+  private final HttpStatus status;
+}
