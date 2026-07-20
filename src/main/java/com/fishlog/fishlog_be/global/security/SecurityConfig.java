@@ -17,7 +17,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * Spring Security 필터 체인. 무상태(JWT) REST API. → docs/security.md §3
  *
- * <p>공개: health·인증 API·조회성 GET(스팟/어종)·Swagger. 그 외는 인증 필요.
+ * <p>공개: 인증 API·조회성 GET(스팟/어종)·Swagger. 그 외는 인증 필요.
  */
 @Configuration
 @EnableWebSecurity
@@ -38,11 +38,7 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(
-                        "/api/health",
-                        "/api/auth/**",
-                        "/swagger-ui/**",
-                        "/swagger-ui.html",
-                        "/v3/api-docs/**")
+                        "/api/auth/**", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/spots/**", "/api/fish/**")
                     .permitAll()
