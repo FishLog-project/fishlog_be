@@ -4,6 +4,8 @@ import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeResponse;
+import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.TokenResponse;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -124,4 +126,59 @@ public interface AuthControllerSpec {
                             """)))
   })
   BaseResponse<EmailVerifyCodeResponse> verifyCode(EmailVerifyCodeRequest request);
+
+  @Operation(
+      summary = "회원가입",
+      description =
+          """
+          ### 설명
+          - 이메일 인증완료 상태에서 비밀번호·닉네임으로 가입합니다. 성공 시 즉시 로그인되어 토큰(Access/Refresh)을 발급합니다.
+
+          ### 제약조건
+          - 비밀번호: 8자 이상, 영문+숫자 포함.
+          - 닉네임: 2~10자, 유니크.
+
+          ### ⚠ 예외상황
+          - `EMAIL_NOT_VERIFIED(400)`: 이메일 인증이 완료되지 않음
+          - `EMAIL_ALREADY_EXISTS(409)`: 이미 가입된 이메일
+          - `NICKNAME_ALREADY_EXISTS(409)`: 이미 사용 중인 닉네임
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "가입 성공(토큰 발급)",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "회원가입이 완료되었습니다.",
+                              "data": {
+                                "userId": 1,
+                                "nickname": "붕어킬러",
+                                "accessToken": "eyJhbGciOi...",
+                                "refreshToken": "eyJhbGciOi...",
+                                "accessTokenExpiresIn": 1800
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "409",
+        description = "이메일/닉네임 중복",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 409, "message": "이미 사용 중인 닉네임입니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<TokenResponse> signup(SignupRequest request);
 }

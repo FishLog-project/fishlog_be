@@ -10,8 +10,10 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum AuthErrorCode implements BaseErrorCode {
   EMAIL_ALREADY_EXISTS("A001", "이미 가입된 이메일입니다.", HttpStatus.CONFLICT),
+  EMAIL_NOT_VERIFIED("A002", "이메일 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST),
   VERIFICATION_CODE_EXPIRED("A003", "인증코드가 만료되었거나 발급되지 않았습니다.", HttpStatus.BAD_REQUEST),
   VERIFICATION_CODE_MISMATCH("A004", "인증코드가 일치하지 않습니다.", HttpStatus.BAD_REQUEST),
+  NICKNAME_ALREADY_EXISTS("A005", "이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT),
   EMAIL_DOMAIN_NOT_ALLOWED("A008", "허용되지 않은 이메일 도메인입니다.", HttpStatus.BAD_REQUEST);
 
   private final String code;

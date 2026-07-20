@@ -4,6 +4,9 @@ import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeResponse;
+import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.TokenResponse;
+import com.fishlog.fishlog_be.domain.auth.service.AuthService;
 import com.fishlog.fishlog_be.domain.auth.service.EmailVerificationService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import jakarta.validation.Valid;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController implements AuthControllerSpec {
 
   private final EmailVerificationService emailVerificationService;
+  private final AuthService authService;
 
   @Override
   @PostMapping("/email/send-code")
@@ -35,5 +39,11 @@ public class AuthController implements AuthControllerSpec {
       @Valid @RequestBody EmailVerifyCodeRequest request) {
     long ttl = emailVerificationService.verifyCode(request.email(), request.code());
     return BaseResponse.success("이메일 인증이 완료되었습니다.", new EmailVerifyCodeResponse(ttl));
+  }
+
+  @Override
+  @PostMapping("/signup")
+  public BaseResponse<TokenResponse> signup(@Valid @RequestBody SignupRequest request) {
+    return BaseResponse.success("회원가입이 완료되었습니다.", authService.signup(request));
   }
 }

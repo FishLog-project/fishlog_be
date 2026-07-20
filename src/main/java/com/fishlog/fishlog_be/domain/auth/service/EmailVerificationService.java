@@ -84,6 +84,16 @@ public class EmailVerificationService {
     return verifiedTtlSeconds;
   }
 
+  /** 이메일 인증완료 플래그가 유효한지. (회원가입 단계에서 확인) */
+  public boolean isVerified(String email) {
+    return Boolean.TRUE.toString().equals(redis.opsForValue().get(VERIFIED_KEY + email));
+  }
+
+  /** 인증완료 플래그 소비(가입 완료 시 삭제). */
+  public void consumeVerified(String email) {
+    redis.delete(VERIFIED_KEY + email);
+  }
+
   private void validateDomain(String email) {
     Set<String> allowed =
         Arrays.stream(allowedEmailDomains.split(","))
