@@ -68,4 +68,20 @@ public class Fish extends BaseTimeEntity {
     this.habitat = habitat;
     this.rarity = rarity;
   }
+
+  /**
+   * 도감(수집) 대상으로 표시한다. 콘텐츠 시드({@code FishContentSeedLoader})에 존재하는 어종에 적용하며, 이전에 논리 삭제됐다가 다시 시드에 추가된
+   * 어종을 복구하는 용도로도 쓴다.
+   */
+  public void markCollectible() {
+    this.isCollectible = true;
+  }
+
+  /**
+   * 도감(수집) 대상에서 제외한다(논리 삭제). 콘텐츠 시드에서 빠진 어종에 적용한다. 행과 사용자 인증 기록({@code catch_record})은 보존되며, 도감
+   * 조회·완성도 랭킹 집계에서만 빠진다.
+   */
+  public void markNotCollectible() {
+    this.isCollectible = false;
+  }
 }
