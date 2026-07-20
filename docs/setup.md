@@ -29,8 +29,22 @@ git submodule update --remote             # 설정 변경 최신화
 
 ## 프로파일 & 환경변수
 - Profile: `local`, `prod`. properties 파일은 서브모듈(`be_config`)에 위치.
-- 필요한 환경변수(DB, JWT 시크릿, AWS S3, 외부 API 키 등)는 서브모듈 properties 또는 실행 환경에 주입.
-- 📋 **필수 환경변수 목록은 도메인 구현과 함께 이 문서에 표로 정리** (현재 미확정).
+- 필요한 환경변수(DB, JWT 시크릿, SMTP, Redis, 외부 API 키 등)는 서브모듈 properties 또는 실행 환경에 주입.
+
+**현재 사용 중인 주요 설정** (인증 세부는 `docs/security.md` §7):
+
+| 키 | 용도 | 필수 | 기본/비고 |
+|---|---|---|---|
+| `spring.datasource.*` | MySQL 접속 | ✅ | 서브모듈 |
+| `spring.data.redis.host` / `.port` | Redis(인증코드·예보 캐시) | ✅(prod 명시) | 로컬 기본 `localhost:6379` |
+| `JWT_SECRET` (`jwt.secret`) | JWT 서명 시크릿 | ✅ | 서브모듈 — 로그인 구현 시 필수 |
+| `spring.mail.*` | SMTP(인증코드 발송) | ✅ | 서브모듈 |
+| `auth.email.*` | 코드 TTL·쿨다운·한도·인증완료 TTL | 선택 | 코드 기본값 존재(`docs/security.md` §7) |
+| `auth.allowed-email-domains` | 가입 허용 이메일 도메인(쉼표) | 선택 | 비우면 제한 없음 |
+| `fishlog.seed.enabled` | 로컬 시드 적재 on/off | 선택 | 로컬 `true` |
+
+- **도입된 의존성(`build.gradle`):** `spring-boot-starter-security`, `io.jsonwebtoken:jjwt-*:0.12.6`, `spring-boot-starter-mail`, `spring-boot-starter-data-redis`, `springdoc-openapi-starter-webmvc-ui:3.0.3`.
+- ⚠️ prod properties(`application-prod.properties`)는 아직 `spring.application.name`만 있어 **DB·Redis·JWT·SMTP를 채워야 배포 가능**.
 
 ## 테스트 환경
 - `src/test/resources/application.yml`이 `DataSourceAutoConfiguration`·`HibernateJpaAutoConfiguration`을 제외 → 테스트는 DB 없이 실행.

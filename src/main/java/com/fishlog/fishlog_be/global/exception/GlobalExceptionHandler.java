@@ -6,9 +6,12 @@ import java.sql.SQLTransientConnectionException;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -92,8 +95,27 @@ public class GlobalExceptionHandler {
         .body(BaseResponse.error(503, "서버가 혼잡합니다. 잠시 후 다시 시도해주세요."));
   }
 
-  // NOTE: Spring Security 도입 시 AuthenticationException/AccessDeniedException 핸들러를,
-  // Redis 도입 시 RedisConnectionFailureException/RedisSystemException 핸들러를 추가하세요.
+  @ExceptionHandler(AuthenticationException.class)
+  public ResponseEntity<BaseResponse<Object>> handleAuthentication(AuthenticationException ex) {
+    log.warn("인증 실패: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(BaseResponse.error(401, "로그인 인증이 필요합니다."));
+  }
+
+  @ExceptionHandler(AccessDeniedException.class)
+  public ResponseEntity<BaseResponse<Object>> handleAccessDenied(AccessDeniedException ex) {
+    log.warn("권한 부족: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(BaseResponse.error(403, "접근 권한이 없습니다."));
+  }
+
+  @ExceptionHandler(RedisConnectionFailureException.class)
+  public ResponseEntity<BaseResponse<Object>> handleRedisConnectionFailure(
+      RedisConnectionFailureException ex) {
+    log.error("Redis 연결 실패: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .body(BaseResponse.error(503, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요."));
+  }
 
   @ExceptionHandler(Exception.class)
   public ResponseEntity<BaseResponse<Object>> handleException(Exception ex) {
