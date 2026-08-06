@@ -74,7 +74,9 @@
 
 모든 응답은 공통 래퍼 `BaseResponse<T>`로 감싼다(`docs/architecture.md`).
 
-### `GET /api/rankings/completion?userId=1` — 완성도 랭킹
+### `GET /api/rankings/completion` — 완성도 랭킹
+
+> 공개. `Authorization: Bearer {accessToken}`을 함께 보내면 `me`가 채워지고, 없으면 `me: null`.
 
 ```json
 {
@@ -115,7 +117,9 @@
 | `top3` | array | 상위 3명(`rankings`의 앞 3개와 동일 데이터) |
 | `rankings` | array | 전체 순위 리스트(내림차순) |
 
-### `GET /api/rankings/size?userId=1` — 크기 랭킹
+### `GET /api/rankings/size` — 크기 랭킹
+
+> 공개. `Authorization: Bearer {accessToken}`을 함께 보내면 `me`가 채워지고, 없으면 `me: null`.
 
 완성도와 **구조 동일**, 점수 필드만 다르다.
 
