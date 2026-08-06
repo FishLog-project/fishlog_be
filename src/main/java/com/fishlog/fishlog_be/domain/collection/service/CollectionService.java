@@ -7,9 +7,9 @@ import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 public interface CollectionService {
 
   /**
-   * 특정 사용자가 특정 어종을 인증한 기록 요약(잡은 횟수 + 사진 URL)을 조회한다.
+   * 로그인 사용자가 특정 어종을 인증한 기록 요약(잡은 횟수 + 사진 URL)을 조회한다.
    *
-   * @param userId 조회 대상 사용자(임시 파라미터, 추후 로그인 사용자로 대체)
+   * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
    * @param fishId 전체 도감 어종 id
    * @return 안 잡았어도 예외가 아니라 catchCount 0 · 빈 목록
    */
@@ -20,7 +20,7 @@ public interface CollectionService {
    *
    * <p>UI가 칸마다 이미지/그림자를 분기하도록 하기 위한 단일 조회다. 어종 목록은 전체 도감과 동일한 순서·집합이며, 잡은 어종 집합만 덧입힌다.
    *
-   * @param userId 조회 대상 사용자(임시 파라미터, 추후 로그인 사용자로 대체)
+   * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
    * @return 총 수·잡은 수·어종 목록(각 항목에 caught 포함)
    */
   MyDexResponse getMyDex(Long userId);
