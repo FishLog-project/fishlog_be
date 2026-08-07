@@ -18,11 +18,11 @@
 | 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
 | ✅ | GET | `/api/fish` | 전체 도감 목록(수집 대상 어종 + 총 수). `?name=`으로 이름 완전일치 검색 | 공개 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
-| ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `userId`(임시)·`fishId` 파라미터 | 공개(임시) |
+| ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
-| 📋 | GET | `/api/collections/me` | 내 어종 도감 전체 조회 | 보호 |
-| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(내 순위+Top3+전체). `userId`(임시) → `docs/ranking.md` | 공개(임시) |
-| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(내 순위+Top3+전체). `userId`(임시) → `docs/ranking.md` | 공개(임시) |
+| ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
+| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(Top3+전체, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
+| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(Top3+전체, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 
 > 위 경로는 초안입니다. 도메인 확정 시 Request/Response 스키마와 함께 상세화.
 
@@ -204,16 +204,17 @@
   - **인증 사진 목록** = 그 행들의 `certified_image_url`.
 - 집계값(`catch_count`·`completion_rate`)을 **저장하지 않고 파생**한다 → 사진 추가/삭제 시 숫자 동기화 버그가 원천 차단. 도메인 규모가 작아 `COUNT` 비용은 무시 가능. 나중에 "대표 사진"·"최초 획득" 같은 (user,fish)당 값이 필요해지면 헤더 테이블로 승격(= 옵션 A).
 - `size`(cm)는 인증 시 **필수(NOT NULL)** 로 기록한다. 이번 조회 응답엔 노출하지 않고 **추후 크기 랭킹**의 기준으로 적재만 한다. 동점 처리를 위해 정수가 아닌 실수(`Double`).
-- `user_id`는 인증(JWT)·`User` 엔티티 도입 전이라 **임시 plain Long**(FK 관계 아님). 도입 시 로그인 사용자에서 채우고 `@ManyToOne User`로 승격.
+- `user_id`는 조회 시 **로그인 토큰에서 채운다**(✅ 전환 완료). 다만 컬럼 자체는 아직 **plain Long**(FK 관계 아님) — `@ManyToOne User` 승격은 스키마 마이그레이션이라 남은 작업이다 → `docs/auth-followup.md` §1.
 
-### `GET /api/collections` — 특정 어종의 내 인증 요약 ✅
+### `GET /api/collections` — 특정 어종의 내 인증 요약 ✅ (보호)
 
 특정 어종에 대해 내가 인증한 **사진 목록 + 잡은 횟수**를 반환한다. 도감에서 어종(그림자/컬러)을 눌렀을 때의 상세용.
 
-- 파라미터: `userId`(임시, 추후 로그인 토큰으로 대체), `fishId`(전체 도감 어종 id).
+- **인증 필요:** `Authorization: Bearer {accessToken}`. 사용자 신원은 **토큰에서 얻으며 `userId` 파라미터는 없다**(남의 도감 조회 차단). 토큰 누락·무효 시 `401`.
+- 파라미터: `fishId`(전체 도감 어종 id).
 - 안 잡은 어종이어도 **404가 아니라 200 + `catchCount:0`·`imageUrls:[]`** — 어종은 도감에 존재하고 "0번 잡음"이 맞기 때문(단건 리소스 조회인 `GET /api/fish/{id}`의 404와 다름).
 
-요청: `GET /api/collections?userId=1&fishId=1`
+요청: `GET /api/collections?fishId=1`
 
 ```json
 {
@@ -231,8 +232,32 @@
 }
 ```
 
-> ⚠️ **임시 사항:** `userId`를 파라미터로 받는 건 인증 미구현 때문의 과도기 조치다. JWT 도입 후에는 `GET /api/collections/me?fishId=`처럼 **로그인 사용자에서 신원을 얻고** `userId` 파라미터는 제거한다(파라미터로 남기면 남의 도감을 조회할 수 있음).
+> ✅ **신원 전환 완료:** 과도기의 `userId` 쿼리 파라미터는 제거됐고 `@AuthenticationPrincipal`로 로그인 사용자에서 신원을 얻는다. 경로는 팀 결정으로 현행 유지(`/me` 리네임 미채택) → `docs/auth-followup.md` §2.
 > ⚠️ **쓰기(POST) 미구현:** 인증 사진을 저장하는 API가 아직 없어, 로컬에서는 `catch_record`에 수동 INSERT(또는 시드)해야 결과가 보인다. `size` NOT NULL 유의.
+
+### `GET /api/collections/dex` — 내 도감 그리드 ✅ (보호)
+
+도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 전체 도감(`GET /api/fish`)과 동일한 순서·집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다.
+
+- **인증 필요:** `Authorization: Bearer {accessToken}`. 파라미터 없음(신원은 토큰).
+- `caught=true`면 도감 이미지(`imageUrl`), `false`면 같은 이미지를 그림자(실루엣)로 렌더한다. **그림자는 클라이언트 이펙트**라 서버는 플래그만 내려준다.
+- `totalCount`/`caughtCount`는 도감 완성도(랭킹의 분모/분자)와 같은 값이라, 이 응답만으로 진행도까지 그릴 수 있다 → `docs/ranking.md`.
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "totalCount": 24,
+    "caughtCount": 12,
+    "fishes": [
+      { "id": 1, "name": "감성돔", "imageUrl": null, "rarity": "USUALLY", "caught": true },
+      { "id": 2, "name": "농어", "imageUrl": null, "rarity": "USUALLY", "caught": false }
+    ]
+  }
+}
+```
 
 ## 데이터 모델 (ERD)
 

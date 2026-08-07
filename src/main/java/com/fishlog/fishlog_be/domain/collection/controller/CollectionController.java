@@ -5,6 +5,7 @@ import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.service.CollectionService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,13 +22,13 @@ public class CollectionController implements CollectionControllerSpec {
   @Override
   @GetMapping
   public BaseResponse<CatchRecordResponse> getMyCatch(
-      @RequestParam Long userId, @RequestParam Long fishId) {
+      @AuthenticationPrincipal Long userId, @RequestParam Long fishId) {
     return BaseResponse.success(collectionService.getMyCatch(userId, fishId));
   }
 
   @Override
   @GetMapping("/dex")
-  public BaseResponse<MyDexResponse> getMyDex(@RequestParam Long userId) {
+  public BaseResponse<MyDexResponse> getMyDex(@AuthenticationPrincipal Long userId) {
     return BaseResponse.success(collectionService.getMyDex(userId));
   }
 }

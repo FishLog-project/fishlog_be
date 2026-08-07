@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -20,20 +21,23 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * <ul>
  *   <li>`metric`: `COMPLETION`(완성도) | `SIZE`(크기)
  *   <li>`totalFishCount`: 완성도 분모(전체 도감 어종 수). <b>크기 랭킹에서는 null</b>
- *   <li>`me`: 본인 순위 블록. `userId` 미전달 시 null
+ *   <li>`me`: 본인 순위 블록. <b>로그인(Bearer 토큰) 시에만</b> 채워지고, 비로그인 요청이면 null
  *   <li>`top3`: 상위 3명(= `rankings`의 앞 3개)
  *   <li>`rankings`: 전체 순위(점수 내림차순)
  * </ul>
  *
- * <p><b>순위 규칙:</b> 공동 순위를 부여한다(예: 점수 [93.1, 93.1, 86.2] → rank [1, 1, 3]). 기록이 전혀 없는 사용자를 `userId`로
- * 조회하면 `me.rank`는 null이다.
+ * <p><b>인증:</b> 랭킹 목록·Top3는 공개(비로그인 조회 가능)다. `Authorization: Bearer {accessToken}`를 함께 보내면 그 사용자의 내
+ * 순위(`me`)가 추가로 채워진다(토큰 선택).
+ *
+ * <p><b>순위 규칙:</b> 공동 순위를 부여한다(예: 점수 [93.1, 93.1, 86.2] → rank [1, 1, 3]). 로그인했지만 인증 기록이 전혀 없으면
+ * `me.rank`는 null이다.
  *
  * <p><b>RankingEntryResponse 필드(기준별로 쓰는 점수만 채워지고 나머지는 null):</b>
  *
  * <ul>
  *   <li>완성도: `caughtCount`, `completionRate` 사용 (`maxSize`=null)
  *   <li>크기: `maxSize` 사용 (`caughtCount`·`completionRate`=null)
- *   <li>`nickname`: User/JWT 도입 전이라 현재 항상 null → docs/auth-followup.md
+ *   <li>`nickname`: `users`에서 조회해 채운다(사용자를 찾지 못하면 null) → docs/ranking.md
  * </ul>
  */
 @Tag(name = "Ranking", description = "사용자 랭킹(도감 완성도·최대 크기) API")
@@ -41,6 +45,7 @@ public interface RankingControllerSpec {
 
   @Operation(
       summary = "도감 완성도 랭킹",
+      security = @SecurityRequirement(name = "JWT"),
       description =
           """
           ### 설명
@@ -49,20 +54,19 @@ public interface RankingControllerSpec {
           - 각 순위 항목은 `caughtCount`(인증한 고유 어종 수)와 `completionRate`(소수 1자리 %)를 사용합니다.
 
           ### 사용 방법
-          - `GET /api/rankings/completion` : 전체·Top3만 필요할 때(본인 순위 없음).
-          - `GET /api/rankings/completion?userId={userId}` : 본인 순위(`me`)를 함께 받고 싶을 때.
+          - `GET /api/rankings/completion` : 전체·Top3만 필요할 때(본인 순위 없음, 비로그인 가능).
+          - `GET /api/rankings/completion` + 헤더 `Authorization: Bearer {accessToken}` : 본인 순위(`me`)를 함께 받고 싶을 때.
 
           ### 제약조건
-          - 공개 API(인증 불필요).
-          - `userId`는 **선택** 파라미터입니다. 없으면 `me`는 null입니다.
+          - 목록·Top3는 공개(인증 불필요)입니다.
+          - 토큰은 **선택**입니다(내 순위 계산용). 토큰이 없으면 `me`는 null입니다.
 
           ### me(본인 순위) 처리
-          - `userId`가 인증 기록을 가진 사용자면 전체 순위에서 본인 항목을 그대로 내려줍니다.
-          - `userId`는 있으나 인증 기록이 없으면 `me`는 `rank:null`, `caughtCount:0`, `completionRate:0.0`으로 내려갑니다.
+          - 로그인 사용자가 인증 기록을 가지면 전체 순위에서 본인 항목을 그대로 내려줍니다.
+          - 로그인했으나 인증 기록이 없으면 `me`는 `rank:null`, `caughtCount:0`, `completionRate:0.0`으로 내려갑니다.
 
           ### ⚠ 예외상황
-          - `400`: `userId`가 숫자가 아닌 경우(공통 파라미터 검증).
-          - 존재하지 않는 `userId`여도 404가 아니라 위 "기록 없음" 형태의 `me`를 반환합니다.
+          - `401`: 토큰을 보냈으나 무효한 경우(토큰을 아예 보내지 않으면 401이 아니라 `me:null`로 정상 처리).
           """)
   @ApiResponses({
     @ApiResponse(
@@ -85,7 +89,7 @@ public interface RankingControllerSpec {
                                 "me": {
                                   "rank": 3,
                                   "userId": 1,
-                                  "nickname": null,
+                                  "nickname": "초보강태공",
                                   "caughtCount": 20,
                                   "completionRate": 69.0,
                                   "maxSize": null
@@ -94,7 +98,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 1,
                                     "userId": 7,
-                                    "nickname": null,
+                                    "nickname": "낚시왕",
                                     "caughtCount": 27,
                                     "completionRate": 93.1,
                                     "maxSize": null
@@ -102,7 +106,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 1,
                                     "userId": 4,
-                                    "nickname": null,
+                                    "nickname": "바다사랑",
                                     "caughtCount": 27,
                                     "completionRate": 93.1,
                                     "maxSize": null
@@ -110,7 +114,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 3,
                                     "userId": 1,
-                                    "nickname": null,
+                                    "nickname": "초보강태공",
                                     "caughtCount": 20,
                                     "completionRate": 69.0,
                                     "maxSize": null
@@ -120,7 +124,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 1,
                                     "userId": 7,
-                                    "nickname": null,
+                                    "nickname": "낚시왕",
                                     "caughtCount": 27,
                                     "completionRate": 93.1,
                                     "maxSize": null
@@ -128,7 +132,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 1,
                                     "userId": 4,
-                                    "nickname": null,
+                                    "nickname": "바다사랑",
                                     "caughtCount": 27,
                                     "completionRate": 93.1,
                                     "maxSize": null
@@ -136,7 +140,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 3,
                                     "userId": 1,
-                                    "nickname": null,
+                                    "nickname": "초보강태공",
                                     "caughtCount": 20,
                                     "completionRate": 69.0,
                                     "maxSize": null
@@ -146,8 +150,8 @@ public interface RankingControllerSpec {
                             }
                             """))),
     @ApiResponse(
-        responseCode = "400",
-        description = "파라미터 타입 오류",
+        responseCode = "401",
+        description = "토큰을 보냈으나 무효",
         content =
             @Content(
                 mediaType = "application/json",
@@ -157,18 +161,17 @@ public interface RankingControllerSpec {
                             """
                             {
                               "success": false,
-                              "code": 400,
-                              "message": "요청 파라미터가 올바르지 않습니다.",
+                              "code": 401,
+                              "message": "인증이 필요합니다.",
                               "data": null
                             }
                             """)))
   })
-  BaseResponse<RankingResponse> getCompletionRanking(
-      @Parameter(description = "사용자 id(임시, 선택). 본인 순위 계산용. 추후 로그인 토큰으로 대체", example = "1")
-          Long userId);
+  BaseResponse<RankingResponse> getCompletionRanking(@Parameter(hidden = true) Long userId);
 
   @Operation(
       summary = "최대 어종 크기 랭킹",
+      security = @SecurityRequirement(name = "JWT"),
       description =
           """
           ### 설명
@@ -177,20 +180,19 @@ public interface RankingControllerSpec {
           - 각 순위 항목은 `maxSize`만 사용하고 `caughtCount`·`completionRate`는 null입니다.
 
           ### 사용 방법
-          - `GET /api/rankings/size` : 전체·Top3만 필요할 때.
-          - `GET /api/rankings/size?userId={userId}` : 본인 순위(`me`)를 함께 받고 싶을 때.
+          - `GET /api/rankings/size` : 전체·Top3만 필요할 때(비로그인 가능).
+          - `GET /api/rankings/size` + 헤더 `Authorization: Bearer {accessToken}` : 본인 순위(`me`)를 함께 받고 싶을 때.
 
           ### 제약조건
-          - 공개 API(인증 불필요).
-          - `userId`는 **선택** 파라미터입니다. 없으면 `me`는 null입니다.
+          - 목록·Top3는 공개(인증 불필요)입니다.
+          - 토큰은 **선택**입니다(내 순위 계산용). 토큰이 없으면 `me`는 null입니다.
 
           ### me(본인 순위) 처리
-          - `userId`가 인증 기록을 가진 사용자면 전체 순위에서 본인 항목을 내려줍니다.
-          - `userId`는 있으나 인증 기록이 없으면 `me`는 `rank:null`, `maxSize:null`로 내려갑니다.
+          - 로그인 사용자가 인증 기록을 가지면 전체 순위에서 본인 항목을 내려줍니다.
+          - 로그인했으나 인증 기록이 없으면 `me`는 `rank:null`, `maxSize:null`로 내려갑니다.
 
           ### ⚠ 예외상황
-          - `400`: `userId`가 숫자가 아닌 경우(공통 파라미터 검증).
-          - 존재하지 않는 `userId`여도 404가 아니라 위 "기록 없음" 형태의 `me`를 반환합니다.
+          - `401`: 토큰을 보냈으나 무효한 경우(토큰을 아예 보내지 않으면 401이 아니라 `me:null`로 정상 처리).
           """)
   @ApiResponses({
     @ApiResponse(
@@ -213,7 +215,7 @@ public interface RankingControllerSpec {
                                 "me": {
                                   "rank": 2,
                                   "userId": 1,
-                                  "nickname": null,
+                                  "nickname": "초보강태공",
                                   "caughtCount": null,
                                   "completionRate": null,
                                   "maxSize": 74.5
@@ -222,7 +224,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 1,
                                     "userId": 7,
-                                    "nickname": null,
+                                    "nickname": "낚시왕",
                                     "caughtCount": null,
                                     "completionRate": null,
                                     "maxSize": 88.0
@@ -230,7 +232,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 2,
                                     "userId": 1,
-                                    "nickname": null,
+                                    "nickname": "초보강태공",
                                     "caughtCount": null,
                                     "completionRate": null,
                                     "maxSize": 74.5
@@ -238,7 +240,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 3,
                                     "userId": 4,
-                                    "nickname": null,
+                                    "nickname": "바다사랑",
                                     "caughtCount": null,
                                     "completionRate": null,
                                     "maxSize": 61.0
@@ -248,7 +250,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 1,
                                     "userId": 7,
-                                    "nickname": null,
+                                    "nickname": "낚시왕",
                                     "caughtCount": null,
                                     "completionRate": null,
                                     "maxSize": 88.0
@@ -256,7 +258,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 2,
                                     "userId": 1,
-                                    "nickname": null,
+                                    "nickname": "초보강태공",
                                     "caughtCount": null,
                                     "completionRate": null,
                                     "maxSize": 74.5
@@ -264,7 +266,7 @@ public interface RankingControllerSpec {
                                   {
                                     "rank": 3,
                                     "userId": 4,
-                                    "nickname": null,
+                                    "nickname": "바다사랑",
                                     "caughtCount": null,
                                     "completionRate": null,
                                     "maxSize": 61.0
@@ -274,8 +276,8 @@ public interface RankingControllerSpec {
                             }
                             """))),
     @ApiResponse(
-        responseCode = "400",
-        description = "파라미터 타입 오류",
+        responseCode = "401",
+        description = "토큰을 보냈으나 무효",
         content =
             @Content(
                 mediaType = "application/json",
@@ -285,13 +287,11 @@ public interface RankingControllerSpec {
                             """
                             {
                               "success": false,
-                              "code": 400,
-                              "message": "요청 파라미터가 올바르지 않습니다.",
+                              "code": 401,
+                              "message": "인증이 필요합니다.",
                               "data": null
                             }
                             """)))
   })
-  BaseResponse<RankingResponse> getSizeRanking(
-      @Parameter(description = "사용자 id(임시, 선택). 본인 순위 계산용. 추후 로그인 토큰으로 대체", example = "1")
-          Long userId);
+  BaseResponse<RankingResponse> getSizeRanking(@Parameter(hidden = true) Long userId);
 }

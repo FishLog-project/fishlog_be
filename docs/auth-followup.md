@@ -18,25 +18,25 @@
 
 ## 1. 공통 (모든 사용자 소유 도메인)
 
-- [ ] **`catch_record.user_id` FK 승격:** 임시 plain Long → `@ManyToOne User` 관계로 변경(`CatchRecord.java`). 기존 행의 `user_id` 값 보존·마이그레이션 포함.
-- [ ] **보호 엔드포인트에 인증 적용:** Spring Security + JWT 필터 도입 후, 아래 "보호" 대상 엔드포인트에 인증 요구.
-- [ ] **`GlobalExceptionHandler` 확장:** `AuthenticationException`(401)·`AccessDeniedException`(403) 핸들러 추가(현재 미구현 메모 → `docs/architecture.md`).
+- [ ] **`catch_record.user_id` FK 승격:** 임시 plain Long → `@ManyToOne User` 관계로 변경(`CatchRecord.java`). 기존 행의 `user_id` 값 보존·마이그레이션 포함. **(아직 미완 — 신원 전환과 별개인 스키마 변경으로 남겨둠)**
+- [x] **보호 엔드포인트에 인증 적용:** Spring Security + JWT 필터 도입 후, 아래 "보호" 대상 엔드포인트에 인증 요구. → `SecurityConfig`
+- [x] **`GlobalExceptionHandler` 확장:** `AuthenticationException`(401)·`AccessDeniedException`(403) 핸들러 추가.
 
-## 2. 사용자 도감 (collection) — 이미 구현됨, 인증 전환만 남음
+## 2. 사용자 도감 (collection) — ✅ 인증(토큰) 전환 완료
 
-- [ ] **엔드포인트 신원 전환:** `GET /api/collections?userId=&fishId=` → `GET /api/collections/me?fishId=`. `userId` 파라미터 **제거**하고 로그인 사용자에서 신원 획득.
-  - 이유: `userId`를 파라미터로 받으면 **남의 도감을 조회**할 수 있음(→ `docs/spec.md` §사용자 도감 ⚠️).
-- [ ] **인증 정책 전환:** 공개(임시) → **보호**.
+- [x] **엔드포인트 신원 전환:** `userId` 쿼리 파라미터 **제거**, 컨트롤러가 `@AuthenticationPrincipal Long userId`로 로그인 사용자에서 신원 획득. (경로는 팀 결정으로 **현행 유지** — `GET /api/collections?fishId=`, `GET /api/collections/dex`. `/me` 리네임은 채택하지 않음.)
+  - 효과: `userId` 파라미터 제거로 **남의 도감 조회(IDOR)** 차단.
+- [x] **인증 정책 전환:** 공개(임시) → **보호**(SecurityConfig의 `anyRequest().authenticated()`로 인증 필수, 토큰 누락/무효 시 401).
 - [ ] (연관·별개 트랙) `POST /api/collections/verify` 인증 사진 업로드(S3) 구현 → 보호. `size` NOT NULL 유의(→ `docs/media.md`).
 
-## 3. 랭킹 (ranking)
+## 3. 랭킹 (ranking) — ✅ 완료
 
-- [ ] **닉네임 채우기:** 응답의 `nickname`(현재 `null`)을 `users`에서 조회해 매핑 → 랭킹 결정 #1(A) 완료 처리(→ `docs/ranking.md`).
-- [ ] **`userId` 파라미터 제거:** `me`(본인 순위) 계산을 파라미터 대신 **로그인 사용자** 기준으로 전환.
-- [ ] **인증 정책 확정:** 랭킹 목록 조회 자체는 공개 유지 가능하나, `me` 블록만 로그인 필요로 분리할지 결정.
+- [x] **닉네임 채우기:** 응답의 `nickname`을 `users`에서 조회해 매핑(`RankingServiceImpl`, `UserRepository.findAllById`로 일괄 조회). 사용자를 찾지 못하면 `null`. → 랭킹 결정 #1(A) 완료.
+- [x] **`userId` 파라미터 제거:** `me`(본인 순위) 계산을 `@AuthenticationPrincipal Long userId`(로그인 사용자) 기준으로 전환.
+- [x] **인증 정책 확정:** **랭킹 목록·Top3는 공개**(`GET /api/rankings/**` permitAll), **`me` 블록만 로그인 시 채움**. 비로그인 요청이면 `me=null`.
 
 ---
 
 ## 완료 판정
 
-위 3개 섹션 체크박스가 모두 처리되면 "임시 `userId`" 흔적이 코드에서 사라진 상태가 된다. 완료 시 각 원본 문서의 ⚠️/임시 표기를 걷어내고 이 문서를 아카이브(또는 삭제)한다.
+§2·§3는 처리 완료돼 도감·랭킹에서 "임시 `userId`" 파라미터 흔적이 사라졌다. **남은 항목은 §1의 `catch_record.user_id` FK 승격 하나**(스키마 마이그레이션)로, 이것까지 끝나면 이 문서를 아카이브(또는 삭제)한다.
