@@ -4,7 +4,7 @@
 >
 > 관련 문서: 엔드포인트·Request/Response·`users` 모델 → `docs/spec.md` / 패키지 배치 → `docs/architecture.md` / 환경변수·서브모듈 → `docs/setup.md`.
 >
-> **구현 현황:** 이메일 인증코드 발송·확인(§1-1·§1-2), 회원가입 완료(§1-3), 로그인·토큰 재발급·로그아웃 엔드포인트(§2), Security/JWT 인프라(`global/security`·`global/jwt`), BCrypt 인코더, 예외 핸들러(401/403/503) **모두 구현 완료 ✅**.
+> **구현 현황:** 이메일 인증코드 발송·확인(§1-1·§1-2), 회원가입 완료(§1-3), 로그인·토큰 재발급·로그아웃 엔드포인트(§2), 비밀번호 재설정(찾기) 흐름(§2-B), Security/JWT 인프라(`global/security`·`global/jwt`), BCrypt 인코더, 예외 핸들러(401/403/503) **모두 구현 완료 ✅**.
 
 ## 1. 회원가입 흐름 (이메일 인증 → 가입)
 
@@ -70,6 +70,28 @@
 ### 2-3. 로그아웃 (`logout`)
 - Bearer 인증 상태에서 호출 → `auth:refresh:{userId}` 삭제(refresh 무효화). Access는 만료까지 유효(짧은 TTL로 위험 최소화; 블랙리스트 도입 여부는 TBD).
 
+## 2-B. 비밀번호 재설정(찾기) 흐름 ✅ 구현됨
+
+비밀번호를 잊은 **가입된 사용자**가 이메일 인증코드로 본인 확인 후 새 비밀번호로 교체한다. §1의 이메일 인증코드 흐름을 그대로 **미러링**하되, 상태는 별도 Redis 네임스페이스 `auth:password:*`에 저장하고(§1의 `auth:email:*`와 분리), 최종 단계에서 계정 생성 대신 **비밀번호를 교체**한다.
+
+```
+[1] POST /api/auth/password/send-code   { email }
+      └ 가입 이메일 검증(미가입 시 EMAIL_NOT_FOUND) → 6자리 코드 → Redis 저장(TTL 5분) → 메일 발송
+[2] POST /api/auth/password/verify-code { email, code }
+      └ 코드 대조 → 일치 시 "재설정 인증완료" 플래그 설정(TTL 10분), 코드 소비
+[3] POST /api/auth/password/reset       { email, newPassword }
+      └ 플래그 확인·소비 → 비밀번호 BCrypt 재해시 → 기존 refresh(auth:refresh:{userId}) 삭제 (토큰 미발급 → 이후 로그인)
+```
+
+- **§1과의 차이점(설계 결정):**
+  - **대상이 반대:** send-code가 **미가입이면 거부**(`EMAIL_NOT_FOUND`, 404). 회원가입 send-code(`EMAIL_ALREADY_EXISTS`)의 반대. (signup send-code가 이미 가입 여부를 노출하므로 일관 — 계정 열거를 완전 차단하려면 §8 참고.)
+  - **별도 서비스:** `PasswordResetService`(+`Impl`)로 흐름을 복제. 기존 `EmailVerificationService`(가입용) 무변경.
+  - **Redis 네임스페이스:** `auth:password:code:` / `auth:password:resend:` / `auth:password:sendcount:` / `auth:password:attempts:` / `auth:password:verified:` (가입용 `auth:email:*`와 완전 분리).
+  - **TTL·남용 방지 수치는 가입용 `auth.email.*` 설정을 재사용**(동일 수치 — 재전송 30초·시간당 5회·오입력 5회 무효화). 분리가 필요하면 §8 참고.
+  - **토큰 미발급 + 세션 무효화:** reset 성공 후 토큰을 발급하지 않고(가입 정책과 일관, 이후 로그인) **기존 `auth:refresh:{userId}`를 삭제**해 유출 가능성이 있는 세션을 무효화한다.
+- **메일:** `EmailSender.sendPasswordResetCode`(제목 "[fishlog] 비밀번호 재설정 인증코드"), `@Async` 비동기 발송.
+- **예외:** 미가입 send-code/reset → `EMAIL_NOT_FOUND`(404), 코드 만료 → `VERIFICATION_CODE_EXPIRED`(400), 불일치 → `VERIFICATION_CODE_MISMATCH`(400), 플래그 없이 reset → `PASSWORD_RESET_NOT_VERIFIED`(400).
+
 ## 3. 인가 (엔드포인트 정책)
 
 - **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 낚시 스팟·어종 등 열람성 조회(`GET /api/spots/**`, `GET /api/fish/**`), 랭킹(`GET /api/rankings/**`), Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
@@ -91,13 +113,13 @@
 | 위치 | 담는 것 | 상태 |
 |---|---|---|
 | `domain/user` | `User` 엔티티·`UserRepository`(`existsByUsername` 등) | ✅ |
-| `domain/auth` | `AuthController`(send-code·verify-code·signup·login·refresh·logout)+`AuthControllerSpec`(Swagger), `EmailVerificationService`(코드 발송·확인, Redis)·`AuthService`(가입·로그인·재발급·로그아웃, refresh 저장), 인증 DTO(record)·`AuthErrorCode`, `mail/EmailSender` | ✅ |
+| `domain/auth` | `AuthController`(send-code·verify-code·signup·login·refresh·logout·password/{send-code·verify-code·reset})+`AuthControllerSpec`(Swagger), `EmailVerificationService`(가입 코드 발송·확인)·`AuthService`(가입·로그인·재발급·로그아웃, refresh 저장)·`PasswordResetService`(재설정 코드 발송·확인·비번 교체), 인증 DTO(record)·`AuthErrorCode`, `mail/EmailSender` | ✅ |
 | `global/jwt` | `JwtProvider`(발급·검증), `JwtAuthenticationFilter` | ✅ |
 | `global/security` | `SecurityConfig`(필터 체인·공개/보호 경로), `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`(`401`)·`JwtAccessDeniedHandler`(`403`) | ✅ |
 | `global/config` | `RedisConfig`(인증코드 저장·예보 캐시), `PasswordConfig`(BCrypt 인코더), `AsyncConfig`(메일 비동기) | ✅ |
 
-- 도메인 에러코드는 `domain/auth/exception/AuthErrorCode`(enum, `BaseErrorCode` 구현)로 `A0xx` 접두사 부여. **A001~A008 모두 구현됨 ✅:**
-  - `A001 EMAIL_ALREADY_EXISTS`(409), `A002 EMAIL_NOT_VERIFIED`(400), `A003 VERIFICATION_CODE_EXPIRED`(400), `A004 VERIFICATION_CODE_MISMATCH`(400), `A005 NICKNAME_ALREADY_EXISTS`(409), `A006 INVALID_CREDENTIALS`(401), `A007 INVALID_REFRESH_TOKEN`(401), `A008 EMAIL_DOMAIN_NOT_ALLOWED`(400).
+- 도메인 에러코드는 `domain/auth/exception/AuthErrorCode`(enum, `BaseErrorCode` 구현)로 `A0xx` 접두사 부여. **A001~A010 모두 구현됨 ✅:**
+  - `A001 EMAIL_ALREADY_EXISTS`(409), `A002 EMAIL_NOT_VERIFIED`(400), `A003 VERIFICATION_CODE_EXPIRED`(400), `A004 VERIFICATION_CODE_MISMATCH`(400), `A005 NICKNAME_ALREADY_EXISTS`(409), `A006 INVALID_CREDENTIALS`(401), `A007 INVALID_REFRESH_TOKEN`(401), `A008 EMAIL_DOMAIN_NOT_ALLOWED`(400), `A009 EMAIL_NOT_FOUND`(404, 비밀번호 재설정 대상 미가입), `A010 PASSWORD_RESET_NOT_VERIFIED`(400, 재설정 인증 미완료).
 
 ## 6. 예외 처리 (Spring Security) ✅ 구현됨
 
@@ -133,6 +155,6 @@
 
 - [x] 가입 즉시 자동 로그인(토큰 발급) vs 별도 로그인 → **별도 로그인으로 확정**(가입 시 토큰 미발급)
 - [ ] 다중 기기 로그인(사용자당 refresh 다건) 허용 여부 — 현재 1개
-- [ ] 비밀번호 재설정(찾기) 흐름 도입 여부 — 도입 시 `auth:password:*` 네임스페이스로 동일 패턴 재사용
+- [x] 비밀번호 재설정(찾기) 흐름 도입 여부 → **도입 완료 ✅** (§2-B, `auth:password:*` 네임스페이스로 동일 패턴 복제). 후속 옵션: 재설정용 TTL·한도를 가입용과 분리(`auth.password.*` 키 신설, 현재는 `auth.email.*` 재사용) / send-code를 제네릭 200으로 바꿔 계정 열거 완전 차단.
 - [ ] Access 강제 무효화(로그아웃 즉시 차단) 필요 시 블랙리스트 도입
 - [ ] 닉네임 허용 문자셋·비밀번호 세부 정책 수치 확정

@@ -39,4 +39,25 @@ public class EmailSender {
       log.warn("[email] 인증코드 발송 실패: {} ({})", to, e.getMessage());
     }
   }
+
+  @Async
+  public void sendPasswordResetCode(String to, String code, long ttlSeconds) {
+    try {
+      SimpleMailMessage message = new SimpleMailMessage();
+      message.setFrom(from);
+      message.setTo(to);
+      message.setSubject("[fishlog] 비밀번호 재설정 인증코드");
+      message.setText(
+          "fishlog 비밀번호 재설정 인증코드입니다.\n\n인증코드: "
+              + code
+              + "\n유효시간: "
+              + (ttlSeconds / 60)
+              + "분\n\n본인이 요청하지 않았다면 무시하세요.");
+      mailSender.send(message);
+      log.info("[email] 비밀번호 재설정 코드 발송 완료: {}", to);
+    } catch (Exception e) {
+      // 비동기라 예외를 삼키고 로깅만.
+      log.warn("[email] 비밀번호 재설정 코드 발송 실패: {} ({})", to, e.getMessage());
+    }
+  }
 }

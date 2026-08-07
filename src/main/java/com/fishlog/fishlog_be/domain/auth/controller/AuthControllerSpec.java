@@ -5,6 +5,7 @@ import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.LoginRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.PasswordResetRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.RefreshRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.SignupResponse;
@@ -306,4 +307,130 @@ public interface AuthControllerSpec {
                             """)))
   })
   BaseResponse<Void> logout(@Parameter(hidden = true) Long userId);
+
+  @Operation(
+      summary = "비밀번호 재설정 - 인증코드 발송",
+      description =
+          """
+          ### 설명
+          - 비밀번호를 잊은 **가입된 사용자**의 이메일로 6자리 인증코드를 발송합니다.
+
+          ### 제약조건
+          - 가입된 이메일이어야 함. 재전송 쿨다운 30초·시간당 5회 제한.
+
+          ### ⚠ 예외상황
+          - `EMAIL_NOT_FOUND(404)`: 가입되지 않은 이메일
+          - 재전송 쿨다운/시간당 한도 초과 시 `429`(data.retryAfterSec 포함)
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "발송 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": true, "code": 200, "message": "비밀번호 재설정 인증코드를 발송했습니다.", "data": { "codeTtlSeconds": 300 } }
+                            """))),
+    @ApiResponse(
+        responseCode = "404",
+        description = "가입되지 않은 이메일",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 404, "message": "가입되지 않은 이메일입니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<EmailSendCodeResponse> sendPasswordResetCode(EmailSendCodeRequest request);
+
+  @Operation(
+      summary = "비밀번호 재설정 - 인증코드 확인",
+      description =
+          """
+          ### 설명
+          - 발송된 6자리 코드를 확인합니다. 일치 시 재설정 인증완료 상태를 부여해 재설정 단계로 진행할 수 있습니다.
+
+          ### 제약조건
+          - 코드는 6자리 숫자. 5회 연속 오입력 시 코드가 무효화되어 재발송 필요.
+
+          ### ⚠ 예외상황
+          - `VERIFICATION_CODE_EXPIRED(400)`: 코드 만료/미발급
+          - `VERIFICATION_CODE_MISMATCH(400)`: 코드 불일치
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "인증 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": true, "code": 200, "message": "인증이 완료되었습니다.", "data": { "verifiedTtlSeconds": 600 } }
+                            """))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "코드 만료/불일치",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 400, "message": "인증코드가 일치하지 않습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<EmailVerifyCodeResponse> verifyPasswordResetCode(EmailVerifyCodeRequest request);
+
+  @Operation(
+      summary = "비밀번호 재설정",
+      description =
+          """
+          ### 설명
+          - 인증완료 상태에서 새 비밀번호로 재설정합니다. **토큰은 발급하지 않으며**, 기존 refresh 토큰을 무효화합니다(재설정 후 새 비밀번호로 로그인).
+
+          ### 제약조건
+          - 새 비밀번호: 8자 이상, 영문+숫자 포함.
+
+          ### ⚠ 예외상황
+          - `PASSWORD_RESET_NOT_VERIFIED(400)`: 인증코드 확인이 완료되지 않음
+          - `EMAIL_NOT_FOUND(404)`: 가입되지 않은 이메일
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "재설정 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": true, "code": 200, "message": "비밀번호가 재설정되었습니다.", "data": null }
+                            """))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "인증 미완료",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 400, "message": "비밀번호 재설정 인증이 완료되지 않았습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<Void> resetPassword(PasswordResetRequest request);
 }

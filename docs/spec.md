@@ -14,6 +14,9 @@
 | ✅ | POST | `/api/auth/login` | 로그인(JWT 발급) | 공개 |
 | ✅ | POST | `/api/auth/refresh` | Access/Refresh 재발급(회전) | 공개 |
 | ✅ | POST | `/api/auth/logout` | 로그아웃(Refresh 무효화) | 보호 |
+| ✅ | POST | `/api/auth/password/send-code` | 비밀번호 재설정 인증코드 발송(가입자만) | 공개 |
+| ✅ | POST | `/api/auth/password/verify-code` | 비밀번호 재설정 인증코드 확인 | 공개 |
+| ✅ | POST | `/api/auth/password/reset` | 비밀번호 재설정(새 비번 교체 + 기존 세션 무효화) | 공개 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
 | 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
 | ✅ | GET | `/api/fish` | 전체 도감 목록(수집 대상 어종 + 총 수). `?name=`으로 이름 완전일치 검색 | 공개 |
@@ -90,6 +93,40 @@
 - `Authorization: Bearer {accessToken}` 필요. 서버의 refresh(`auth:refresh:{userId}`) 삭제. `data: null`.
 
 > 토큰 만료·저장·회전 정책과 오류 코드(`A00x`) 전체는 `docs/security.md`(§2, §5).
+
+#### 비밀번호 재설정(찾기) ✅
+
+재설정 흐름: **① password/send-code → ② password/verify-code → ③ password/reset**. 가입 흐름과 동일 패턴이나 상태는 별도 Redis 네임스페이스(`auth:password:*`)에 저장되고, 대상은 **가입된 사용자**다(`docs/security.md` §2-B).
+
+#### `POST /api/auth/password/send-code` — 재설정 인증코드 발송 ✅
+```jsonc
+// Request
+{ "email": "angler@gmail.com" }
+// Response(data)
+{ "codeTtlSeconds": 300 }          // 코드 유효시간(초)
+```
+- **가입되지 않은 이메일이면 `404 EMAIL_NOT_FOUND`**(회원가입 send-code와 반대).
+- 남용 방지: 재전송 쿨다운 30초·시간당 5회 초과 시 `429`(`data.retryAfterSec`).
+
+#### `POST /api/auth/password/verify-code` — 재설정 인증코드 확인 ✅
+```jsonc
+// Request
+{ "email": "angler@gmail.com", "code": "482913" }   // code: 숫자 6자리
+// Response(data)
+{ "verifiedTtlSeconds": 600 }      // 재설정 인증완료 상태 유지시간(초)
+```
+- 만료/미발송 `VERIFICATION_CODE_EXPIRED`, 불일치 `VERIFICATION_CODE_MISMATCH`(5회 오입력 시 코드 무효화).
+- 성공 시 재설정 인증완료 플래그(`auth:password:verified:{email}`, TTL 10분) 설정 → 이 안에 reset 완료해야 함.
+
+#### `POST /api/auth/password/reset` — 비밀번호 재설정 ✅
+```jsonc
+// Request
+{ "email": "angler@gmail.com", "newPassword": "fishlog5678" }   // 8자 이상, 영문+숫자
+// Response
+// data: null
+```
+- 인증완료 플래그 없으면 `400 PASSWORD_RESET_NOT_VERIFIED`, 사용자 미존재 시 `404 EMAIL_NOT_FOUND`.
+- 성공 시 비밀번호 BCrypt 재해시 저장 → 인증완료 플래그 소비 → **기존 refresh(`auth:refresh:{userId}`) 삭제**(세션 무효화). **토큰은 발급하지 않으며** 새 비밀번호로 다시 로그인한다.
 
 ### 전체 도감 (어종 카탈로그) ✅
 
