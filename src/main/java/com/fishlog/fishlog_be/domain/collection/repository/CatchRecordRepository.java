@@ -17,6 +17,14 @@ public interface CatchRecordRepository extends JpaRepository<CatchRecord, Long> 
   List<CatchRecord> findByUserIdAndFish_Id(Long userId, Long fishId);
 
   /**
+   * 특정 어종에 대한 인증 기록 존재 여부.
+   *
+   * <p>시드에서 빠진 어종을 물리 삭제해도 되는지 판단하는 가드다. 기록이 하나라도 있으면 사용자 데이터가 사라지므로 삭제하지 않고 논리 삭제로 남긴다. → {@code
+   * FishContentSeedLoader}
+   */
+  boolean existsByFish_Id(Long fishId);
+
+  /**
    * 특정 사용자가 한 번이라도 인증한 <b>수집 대상</b> 어종의 id 집합(중복 제거).
    *
    * <p>내 도감 그리드에서 각 칸의 잡음/못잡음을 O(1)로 판정하기 위한 소스다. 같은 어종을 여러 번 잡아도 id 하나로 접히며, 논리 삭제된 어종({@code

@@ -78,8 +78,9 @@ public class Fish extends BaseTimeEntity {
   }
 
   /**
-   * 도감(수집) 대상에서 제외한다(논리 삭제). 콘텐츠 시드에서 빠진 어종에 적용한다. 행과 사용자 인증 기록({@code catch_record})은 보존되며, 도감
-   * 조회·완성도 랭킹 집계에서만 빠진다.
+   * 도감(수집) 대상에서 제외한다(논리 삭제). 콘텐츠 시드에서 빠졌지만 <b>사용자 인증 기록({@code catch_record})이 있어 물리 삭제할 수 없는</b>
+   * 어종에만 적용한다(기록 없는 어종은 {@code FishContentSeedLoader}가 행째 삭제한다). 행과 인증 기록은 보존되며 도감 조회·완성도 랭킹 집계에서만
+   * 빠진다.
    */
   public void markNotCollectible() {
     this.isCollectible = false;
