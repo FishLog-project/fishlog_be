@@ -25,7 +25,7 @@ com.fishlog.fishlog_be
 │  │  ├─ entity/Spot.java  entity/MajorFish.java
 │  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java
 │  ├─ fish                       # 어종 전체 도감(마스터 카탈로그)
-│  │  ├─ controller/FishController.java     # GET /api/fish, /api/fish/{id}
+│  │  ├─ controller/FishController.java     # GET /api/fish/{id} (상세만 공개; 목록은 제거, dex가 대체)
 │  │  ├─ service/FishService.java · FishServiceImpl.java
 │  │  ├─ dto/FishListResponse.java · FishSummaryResponse.java · FishDetailResponse.java
 │  │  ├─ entity/Fish.java · Rarity.java
