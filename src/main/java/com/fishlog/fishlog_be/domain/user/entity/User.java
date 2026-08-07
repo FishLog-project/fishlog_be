@@ -39,4 +39,9 @@ public class User extends BaseTimeEntity {
   /** 표시 이름(2~10자, 유니크). */
   @Column(nullable = false, unique = true)
   private String nickname;
+
+  /** 비밀번호 교체(재설정). setter 대신 도메인 메서드로 노출. 인자는 이미 BCrypt로 인코딩된 값이어야 한다. */
+  public void changePassword(String encodedPassword) {
+    this.password = encodedPassword;
+  }
 }

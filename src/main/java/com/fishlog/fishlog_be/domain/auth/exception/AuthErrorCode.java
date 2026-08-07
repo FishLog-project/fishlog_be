@@ -16,7 +16,9 @@ public enum AuthErrorCode implements BaseErrorCode {
   NICKNAME_ALREADY_EXISTS("A005", "이미 사용 중인 닉네임입니다.", HttpStatus.CONFLICT),
   INVALID_CREDENTIALS("A006", "이메일 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
   INVALID_REFRESH_TOKEN("A007", "유효하지 않은 refresh 토큰입니다.", HttpStatus.UNAUTHORIZED),
-  EMAIL_DOMAIN_NOT_ALLOWED("A008", "허용되지 않은 이메일 도메인입니다.", HttpStatus.BAD_REQUEST);
+  EMAIL_DOMAIN_NOT_ALLOWED("A008", "허용되지 않은 이메일 도메인입니다.", HttpStatus.BAD_REQUEST),
+  EMAIL_NOT_FOUND("A009", "가입되지 않은 이메일입니다.", HttpStatus.NOT_FOUND),
+  PASSWORD_RESET_NOT_VERIFIED("A010", "비밀번호 재설정 인증이 완료되지 않았습니다.", HttpStatus.BAD_REQUEST);
 
   private final String code;
   private final String message;
