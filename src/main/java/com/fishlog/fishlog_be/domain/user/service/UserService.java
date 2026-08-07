@@ -13,4 +13,7 @@ public interface UserService {
 
   /** 비밀번호 변경. 현재 비밀번호 확인 후 교체하고 기존 refresh를 무효화한다(재로그인). */
   void changePassword(Long userId, String currentPassword, String newPassword);
+
+  /** 회원탈퇴. 현재 비밀번호 확인 후 사용자·도감 인증기록·refresh를 삭제한다(하드 삭제). */
+  void withdraw(Long userId, String password);
 }

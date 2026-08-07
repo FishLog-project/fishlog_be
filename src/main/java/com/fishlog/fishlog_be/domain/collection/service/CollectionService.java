@@ -24,4 +24,13 @@ public interface CollectionService {
    * @return 총 수·잡은 수·어종 목록(각 항목에 caught 포함)
    */
   MyDexResponse getMyDex(Long userId);
+
+  /**
+   * 회원탈퇴 등으로 해당 사용자의 모든 도감 인증 기록을 삭제한다.
+   *
+   * <p>다른 도메인(user)의 회원탈퇴 흐름에서 도메인 경계를 지켜 호출하기 위한 진입점이다.
+   *
+   * @param userId 삭제 대상 사용자 id
+   */
+  void deleteMyRecords(Long userId);
 }

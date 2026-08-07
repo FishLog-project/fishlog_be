@@ -41,4 +41,10 @@ public class CollectionServiceImpl implements CollectionService {
         dex.stream().map(fish -> DexEntryResponse.of(fish, caughtIds.contains(fish.id()))).toList();
     return MyDexResponse.of(entries);
   }
+
+  @Override
+  @Transactional
+  public void deleteMyRecords(Long userId) {
+    catchRecordRepository.deleteByUserId(userId);
+  }
 }

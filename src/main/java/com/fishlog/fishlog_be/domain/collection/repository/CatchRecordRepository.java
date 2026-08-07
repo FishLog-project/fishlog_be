@@ -33,6 +33,14 @@ public interface CatchRecordRepository extends JpaRepository<CatchRecord, Long> 
   List<Long> findDistinctCaughtFishIds(@Param("userId") Long userId);
 
   /**
+   * 회원탈퇴 시 해당 사용자의 모든 인증 기록을 삭제한다(하드).
+   *
+   * <p>{@code user_id}는 FK가 아니라 plain Long이라 DB 캐스케이드가 없다. 사용자 삭제 시 남으면 랭킹 집계에 유령 userId로 잡히므로 함께
+   * 지운다. → docs/auth-followup.md
+   */
+  void deleteByUserId(Long userId);
+
+  /**
    * 완성도 랭킹: 사용자별 고유 어종 수를 내림차순으로 집계한다.
    *
    * <p>같은 어종을 여러 번 인증하면 여러 행이므로 {@code COUNT(DISTINCT fish.id)}로 센다. 분모({@code fishes} 전체 수)와 같은
