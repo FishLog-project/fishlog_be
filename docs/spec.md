@@ -23,7 +23,6 @@
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
 | 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
-| ✅ | GET | `/api/fish` | 전체 도감 목록(수집 대상 어종 + 총 수). `?name=`으로 이름 완전일치 검색 | 공개 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
@@ -174,32 +173,9 @@
 
 ### 전체 도감 (어종 카탈로그) ✅
 
-**`GET /api/fish`** — 전체 도감 목록 / 이름 검색. 공개. 페이징 없음, `id` 오름차순. `fishes`의 **모든 행**(확정 24종)을 반환한다.
+> **목록 `GET /api/fish` 는 제거됨.** 전체 어종 그리드는 로그인 도감(`GET /api/collections/dex`)이 `caught` 여부와 함께 내려주므로 별도 공개 목록이 불필요해졌다. 상세만 공개로 남긴다. 목록 조립 로직(`FishService.getFishList`)은 `dex`가 내부에서 재사용하므로 서비스 계층엔 유지된다.
 
-| 파라미터 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `name` | String | 선택 | 어종명 **완전일치** 검색. 있으면 일치 어종만(0~1건), 없거나 공백이면 전체 목록. |
-
-- `name` 검색은 `fishes` 전체를 대상으로 한다. 도감에서 숨겨진 어종이라는 개념이 없기 때문이다(아래 "`is_collectible` 제거" 참고).
-- 일치하는 어종이 없으면 **404가 아니라 `200 + 빈 목록`**(`totalCount:0`). 컬렉션 필터이므로 "조건에 맞는 것 없음"은 정상 응답이다(단건 지목인 `GET /api/fish/{id}`의 404와 대비).
-
-```json
-{
-  "success": true,
-  "code": 200,
-  "message": "요청이 성공적으로 처리되었습니다.",
-  "data": {
-    "totalCount": 6,
-    "fishes": [
-      { "id": 1, "name": "감성돔", "imageUrl": null, "rarity": "USUALLY" }
-    ]
-  }
-}
-```
-
-`GET /api/fish?name=감성돔` → `totalCount:1` + 감성돔 1건. `GET /api/fish?name=없는어종` → `totalCount:0` + 빈 목록.
-
-**`GET /api/fish/{id}`** — 어종 상세. 공개. 해당 id가 없으면 404(`F001` 해당 어종을 찾을 수 없습니다.).
+**`GET /api/fish/{id}`** — 어종 상세. 공개. 해당 id가 없으면 404(`F001` 해당 어종을 찾을 수 없습니다.). 경로 변수 `id`는 `GET /api/collections/dex` 응답의 `data.fishes[].id`를 사용한다.
 
 ```json
 {
@@ -396,7 +372,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ### `GET /api/collections/dex` — 내 도감 그리드 ✅ (보호)
 
-도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 전체 도감(`GET /api/fish`)과 동일한 순서·집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다.
+도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 `id` 오름차순 전체 집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다. (어종 목록 조립은 `FishService.getFishList`를 내부 재사용한다.)
 
 - **인증 필요:** `Authorization: Bearer {accessToken}`. 파라미터 없음(신원은 토큰).
 - `caught=true`면 도감 이미지(`imageUrl`), `false`면 같은 이미지를 그림자(실루엣)로 렌더한다. **그림자는 클라이언트 이펙트**라 서버는 플래그만 내려준다.
