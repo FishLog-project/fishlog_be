@@ -15,9 +15,9 @@ com.fishlog.fishlog_be
 │  │  ├─ mail/EmailSender.java                 # 인증코드·비밀번호 재설정 코드 메일 발송
 │  │  └─ service/EmailVerificationService·AuthService·PasswordResetService (+Impl)  # 코드 발송·확인 / 가입·로그인·재발급·로그아웃 / 비밀번호 찾기
 │  ├─ user                       # 로그인 주체 + 마이페이지(내 프로필·닉네임·비밀번호 변경)
-│  │  ├─ controller/UserController.java (+Spec)  # GET /api/users/me, PATCH /me/nickname, /me/password
-│  │  ├─ service/UserService.java · UserServiceImpl.java
-│  │  ├─ dto/MyProfileResponse · NicknameUpdateRequest · PasswordUpdateRequest
+│  │  ├─ controller/UserController.java (+Spec)  # GET /api/users/me, PATCH /me/nickname·/me/password, DELETE /me
+│  │  ├─ service/UserService.java · UserServiceImpl.java  # 프로필·닉네임·비밀번호 변경·회원탈퇴
+│  │  ├─ dto/MyProfileResponse · NicknameUpdateRequest · PasswordUpdateRequest · WithdrawRequest
 │  │  ├─ exception/UserErrorCode.java          # U001~U004
 │  │  ├─ entity/User.java  repository/UserRepository.java
 │  ├─ spot                       # 스팟 목록 + MajorFish

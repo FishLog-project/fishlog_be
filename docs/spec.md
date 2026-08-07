@@ -20,6 +20,7 @@
 | ✅ | GET | `/api/users/me` | 내 프로필 조회(마이페이지, 이메일·닉네임) | 보호 |
 | ✅ | PATCH | `/api/users/me/nickname` | 닉네임 변경(마이페이지) | 보호 |
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
+| ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
 | 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
 | ✅ | GET | `/api/fish` | 전체 도감 목록(수집 대상 어종 + 총 수). `?name=`으로 이름 완전일치 검색 | 공개 |
@@ -160,6 +161,16 @@
 ```
 - 현재 비밀번호 불일치 `400 INVALID_CURRENT_PASSWORD`, 새 비번이 현재와 동일 `400 SAME_AS_CURRENT_PASSWORD`.
 - 성공 시 새 비번 BCrypt 재해시 저장 → **기존 refresh(`auth:refresh:{userId}`) 삭제**(세션 무효화) → 새 비밀번호로 재로그인 필요.
+
+#### `DELETE /api/users/me` — 회원탈퇴 ✅
+```jsonc
+// Request
+{ "password": "fishlog1234" }   // 본인 확인용 현재 비밀번호
+// Response
+// data: null
+```
+- 비밀번호 불일치 `400 INVALID_CURRENT_PASSWORD`, 사용자 미존재 `404 USER_NOT_FOUND`.
+- **하드 삭제**: 사용자(`users`) + 그 사용자의 **도감 인증기록(`catch_record`)** 을 함께 삭제하고 refresh(`auth:refresh:{userId}`)를 무효화한다. `catch_record.user_id`는 FK가 아니라(plain Long) DB 캐스케이드가 없어 명시 삭제하며, 남기면 랭킹에 유령 userId로 잡힌다. 되돌릴 수 없다.
 
 ### 전체 도감 (어종 카탈로그) ✅
 
