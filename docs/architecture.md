@@ -1,6 +1,6 @@
 # architecture.md — 패키지 구조·레이어·공통 패턴
 
-> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증·회원가입·로그인)·스팟 목록·어종 전체 도감·시드 적재와 Security/JWT·Redis 인프라가 구현되어 있고, 스팟 상세·도감 인증 등 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
+> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증·회원가입·로그인)·스팟 목록·어종 전체 도감·사용자 도감 조회·랭킹·시드 적재와 Security/JWT·Redis 인프라가 구현되어 있고, 스팟 상세·어종 인증 사진 업로드(S3) 등 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
 
 ## 현재 구조 ✅
 
@@ -20,20 +20,30 @@ com.fishlog.fishlog_be
 │  │  ├─ controller/SpotController.java (+Spec)  service/SpotService (+Impl)  dto/SpotResponse.java
 │  │  ├─ entity/Spot.java  entity/MajorFish.java
 │  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java
-│  └─ fish                       # 어종 전체 도감(마스터 카탈로그)
-│     ├─ controller/FishController.java     # GET /api/fish, /api/fish/{id}
-│     ├─ service/FishService.java · FishServiceImpl.java
-│     ├─ dto/FishListResponse.java · FishSummaryResponse.java · FishDetailResponse.java
-│     ├─ entity/Fish.java · Rarity.java
-│     ├─ repository/FishRepository.java
-│     └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
+│  ├─ fish                       # 어종 전체 도감(마스터 카탈로그)
+│  │  ├─ controller/FishController.java     # GET /api/fish, /api/fish/{id}
+│  │  ├─ service/FishService.java · FishServiceImpl.java
+│  │  ├─ dto/FishListResponse.java · FishSummaryResponse.java · FishDetailResponse.java
+│  │  ├─ entity/Fish.java · Rarity.java
+│  │  ├─ repository/FishRepository.java
+│  │  └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
+│  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행
+│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /api/collections/dex (보호)
+│  │  ├─ service/CollectionService.java · CollectionServiceImpl.java
+│  │  ├─ dto/CatchRecordResponse.java · MyDexResponse.java · DexEntryResponse.java
+│  │  ├─ entity/CatchRecord.java
+│  │  └─ repository/CatchRecordRepository.java · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
+│  └─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
+│     ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
+│     ├─ service/RankingService.java · RankingServiceImpl.java
+│     └─ dto/RankingResponse.java · RankingEntryResponse.java · RankingType.java
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
-   ├─ config                                  # AsyncConfig(@Async), PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장)
+   ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), SwaggerConfig(JWT 스킴)
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
-   ├─ init                                    # SeedDataInitializer, SpotSeedLoader, SeedDataReader (+dto) — 스팟/어종 시드 적재
+   ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, SeedDataReader (+dto) — 스팟/어종 시드 적재
    └─ exception
       ├─ model/BaseErrorCode.java             # 에러 코드 인터페이스 (code/message/status)
       ├─ GlobalErrorCode.java                 # 전역 에러 코드 enum (G001~G006)
@@ -47,7 +57,7 @@ com.fishlog.fishlog_be
 
 ## 패키지 구조 처리 규칙 📋
 
-> 아래는 **새 도메인/기능을 추가할 때 지켜야 하는 패키지 배치 규칙**입니다. `domain`에는 이미 `auth`·`user`·`spot`·`fish`가 있으며(`auth`·`fish`가 controller/service/dto/exception까지 채운 수직 슬라이스 사례), 새 도메인은 이를 참고해 동일하게 생성합니다.
+> 아래는 **새 도메인/기능을 추가할 때 지켜야 하는 패키지 배치 규칙**입니다. `domain`에는 이미 `auth`·`user`·`spot`·`fish`·`collection`·`ranking`이 있으며(`auth`·`fish`가 controller/service/dto/exception까지 채운 수직 슬라이스 사례), 새 도메인은 이를 참고해 동일하게 생성합니다.
 
 ### 최상위 2분할: `global` vs `domain`
 
@@ -77,21 +87,22 @@ com.fishlog.fishlog_be
 | `event` | 선택 | 도메인 이벤트 + 리스너 | `XxxEvent` / `XxxEventListener` |
 | `policy` | 선택 | 정책·규칙 계산 로직(가격·할인 등) | `XxxPolicy` |
 
-예시 (fishlog 예정 도메인):
+예시 — 레이어를 다 채운 도메인의 목표 형태(아래 `user`는 **현재 `entity`·`repository`만 존재**하며, 나머지 레이어는 프로필 API 도입 시 채운다):
 
 ```
 domain
-├─ user                     # 회원/인증(로그인 주체)
-│  ├─ controller/UserController.java
-│  ├─ service/UserService.java  service/UserServiceImpl.java
-│  ├─ repository/UserRepository.java
-│  ├─ entity/User.java   # (권한 Role은 추후 도입 예정 — 현재 미포함)
-│  ├─ dto/UserProfileResponse.java
-│  └─ exception/UserErrorCode.java
-├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)
-├─ fish                     # 어종 정보
-├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md)
-└─ tour                     # 주변 관광 시설 (외부 연동 → docs/external.md)
+├─ user                     # 회원/인증(로그인 주체) 🚧 entity·repository만 구현
+│  ├─ controller/UserController.java      📋
+│  ├─ service/UserService.java  service/UserServiceImpl.java  📋
+│  ├─ repository/UserRepository.java      ✅
+│  ├─ entity/User.java                    ✅ (권한 Role은 추후 도입 예정 — 현재 미포함)
+│  ├─ dto/UserProfileResponse.java        📋
+│  └─ exception/UserErrorCode.java        📋
+├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록만
+├─ fish                     # 어종 정보                                      ✅
+├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회만(업로드 📋)
+├─ ranking                  # 사용자 랭킹 (→ docs/ranking.md)                 ✅
+└─ tour                     # 주변 관광 시설 (외부 연동 → docs/external.md)     📋
 ```
 
 **레이어 규칙**
@@ -124,7 +135,7 @@ domain
 - multipart(파일 업로드) 엔드포인트는 FormData 전송 구조(키 이름·JSON part)를 description에 명시한다.
 
 **보호(인증) 엔드포인트**
-- `@Operation(security = @SecurityRequirement(name = "JWT"))`를 붙인다. 이 이름은 `global/config`의 Swagger 설정(`SwaggerConfig`)에 등록할 **Bearer JWT SecurityScheme 이름과 일치**해야 한다(📋 SwaggerConfig에 스킴 등록 필요 → `docs/security.md`).
+- `@Operation(security = @SecurityRequirement(name = "JWT"))`를 붙인다. 이 이름은 `global/config/SwaggerConfig`에 등록된 **Bearer JWT SecurityScheme 이름(`SwaggerConfig.SECURITY_SCHEME_NAME` = `"JWT"`)과 일치**해야 한다 ✅. 전역 `SecurityRequirement`는 걸지 않으므로(공개 엔드포인트에 자물쇠가 붙지 않도록) **보호 엔드포인트마다 개별 선언**한다 → `docs/security.md`.
 
 **템플릿 (스팟 도메인 예)**
 
@@ -198,7 +209,7 @@ public class SpotController implements SpotControllerSpec {
 | `common` | 공통 상위 엔티티 등(`BaseTimeEntity`) | ✅ |
 | `response` | 공통 응답 래퍼(`BaseResponse`) | ✅ |
 | `exception` (+`model`) | 전역 예외 처리·공통 에러 코드(`GlobalExceptionHandler`, `GlobalErrorCode`, `model/BaseErrorCode`) | ✅ |
-| `config` | Spring `@Configuration` 모음 — `AsyncConfig`·`PasswordConfig`(BCrypt)·`RedisConfig` 존재. (Swagger 설정은 미도입) | ✅ |
+| `config` | Spring `@Configuration` 모음 — `AsyncConfig`(@Async)·`CorsConfig`·`PasswordConfig`(BCrypt)·`RedisConfig`(캐시·인증코드 저장)·`SwaggerConfig`(OpenAPI + Bearer JWT 스킴) | ✅ |
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (docs/media.md) | 📋 |
