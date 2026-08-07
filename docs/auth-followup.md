@@ -1,18 +1,14 @@
 # auth-followup.md — 인증(User/JWT) 완성 후 후속 작업
 
-> **목적:** `User` 도메인(`users` 테이블·엔티티)과 JWT 인증이 **다른 팀원 작업으로 확정·병합되면**, 그동안 "임시 `userId`(plain Long)"로 우회해 둔 부분을 이어서 마무리하기 위한 **후속 작업 체크리스트**다.
+> **목적:** `User` 도메인(`users` 테이블·엔티티)과 JWT 인증이 **병합 완료**되어, 그동안 "임시 `userId`(plain Long)"로 우회해 둔 부분을 마무리하기 위한 **후속 작업 체크리스트**다. 신원 전환(§2·§3)은 끝났고 **남은 것은 §1의 FK 승격 하나**다.
 >
 > 각 도메인 문서(`docs/spec.md`, `docs/ranking.md`, `docs/security.md`)에 인라인 ⚠️로 흩어진 조치를 **한곳에 모은 것**이며, 이 문서가 후속 작업의 단일 진입점이다. 인증 방식·정책 원본은 `docs/security.md`.
 
-## 전제 (다른 팀원 도메인에서 제공되어야 하는 것)
+## 전제 ✅ 모두 충족됨
 
-이 문서의 작업은 아래가 갖춰진 뒤 시작한다.
-
-- [ ] `users` 테이블 + `User` 엔티티 (식별자 `id`, 표시용 `nickname` 등) — `docs/security.md`, `docs/product.md`
-- [ ] JWT 발급/검증 + 인증 필터 체인(`global/security`) — `docs/security.md`, `docs/architecture.md`
-- [ ] 로그인 사용자 신원을 컨트롤러에서 얻는 방법(예: `@AuthenticationPrincipal`) 확립
-
-> 위가 확정되기 전에는 현재의 임시 `userId` 파라미터 방식을 그대로 둔다(도감·랭킹 모두 동작함).
+- [x] `users` 테이블 + `User` 엔티티 (`id`, `username`, `password`, `nickname`) — `docs/security.md`, `docs/product.md`
+- [x] JWT 발급/검증 + 인증 필터 체인(`global/jwt`·`global/security`) — `docs/security.md`, `docs/architecture.md`
+- [x] 로그인 사용자 신원 획득 방법 확립 — `JwtAuthenticationFilter`가 **principal에 `Long userId`를 직접** 넣으므로 컨트롤러에서 `@AuthenticationPrincipal Long userId`로 받는다(`CustomUserDetails`는 로그인 시점에만 쓰임).
 
 ---
 

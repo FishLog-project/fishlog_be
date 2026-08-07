@@ -4,7 +4,7 @@
 >
 > 관련 문서: 엔드포인트·Request/Response·`users` 모델 → `docs/spec.md` / 패키지 배치 → `docs/architecture.md` / 환경변수·서브모듈 → `docs/setup.md`.
 >
-> **구현 현황:** 이메일 인증코드 발송·확인(§1-1·§1-2), 회원가입 완료(§1-3), 로그인·토큰 재발급·로그아웃 엔드포인트(§2), 비밀번호 재설정(찾기) 흐름(§2-B), Security/JWT 인프라(`global/security`·`global/jwt`), BCrypt 인코더, 예외 핸들러(401/403/503) **모두 구현 완료 ✅**.
+> **구현 현황:** 이메일 인증코드 발송·확인(§1-1·§1-2), 회원가입 완료(§1-3), 로그인·토큰 재발급·로그아웃 엔드포인트(§2), 비밀번호 재설정(찾기) 흐름(§2-B), 마이페이지 프로필·닉네임·비밀번호 변경·회원탈퇴(§2-C), Security/JWT 인프라(`global/security`·`global/jwt`), BCrypt 인코더, 예외 핸들러(401/403/503) **모두 구현 완료 ✅**.
 
 ## 1. 회원가입 흐름 (이메일 인증 → 가입)
 
@@ -92,11 +92,30 @@
 - **메일:** `EmailSender.sendPasswordResetCode`(제목 "[fishlog] 비밀번호 재설정 인증코드"), `@Async` 비동기 발송.
 - **예외:** 미가입 send-code/reset → `EMAIL_NOT_FOUND`(404), 코드 만료 → `VERIFICATION_CODE_EXPIRED`(400), 불일치 → `VERIFICATION_CODE_MISMATCH`(400), 플래그 없이 reset → `PASSWORD_RESET_NOT_VERIFIED`(400).
 
+## 2-C. 마이페이지 (프로필/닉네임/비밀번호 변경) ✅ 구현됨
+
+로그인 사용자 본인이 프로필을 조회·수정하는 흐름. **비로그인 "비밀번호 찾기"(§2-B)와 명확히 구분**된다: 여기서는 이미 인증된 사용자를 대상으로 하므로 이메일 인증코드를 쓰지 않고, 신원은 **토큰(`@AuthenticationPrincipal`)** 으로만 얻는다. `domain/user` 수직 슬라이스(`UserController`·`UserService`·DTO·`UserErrorCode`)로 구현.
+
+```
+GET    /api/users/me            → { userId, email, nickname }
+PATCH  /api/users/me/nickname   { nickname }                       → 유니크 검사 후 교체(동일값 no-op)
+PATCH  /api/users/me/password   { currentPassword, newPassword }   → 현재 비번 확인 후 교체 + refresh 삭제
+DELETE /api/users/me            { password }                       → 현재 비번 확인 후 사용자·도감기록 하드 삭제 + refresh 삭제
+```
+
+- **모두 보호 엔드포인트:** `/api/users/**`는 `SecurityConfig`의 `anyRequest().authenticated()`로 자동 보호(별도 매처 불필요). 미인증 → `401`.
+- **비밀번호 변경(§2-B와의 차이):** "비밀번호 찾기"는 이메일 코드로 신원을 확인하지만(잊은 사람 대상), 마이페이지 변경은 **현재 비밀번호 확인**(`passwordEncoder.matches`)으로 신원을 재확인한다. 세션 탈취 상태에서의 임의 변경을 막기 위함.
+  - 현재 비번 불일치 → `INVALID_CURRENT_PASSWORD`(400), 새 비번이 현재와 동일 → `SAME_AS_CURRENT_PASSWORD`(400).
+  - 성공 시 **기존 `auth:refresh:{userId}` 삭제**(세션 무효화) → 새 비번으로 재로그인. (§2-B reset과 동일한 무효화 정책.)
+- **닉네임 변경:** 현재 닉네임과 같으면 no-op 성공, 다르면 `existsByNickname` 중복 검사 후 교체. 중복 → `NICKNAME_ALREADY_EXISTS`(409, U0xx).
+- **회원탈퇴(`DELETE /api/users/me`):** 비번 변경과 동일하게 **현재 비밀번호 확인** 후 진행. **하드 삭제**로 `users` 행과 그 사용자의 **도감 인증기록(`catch_record`)** 을 함께 삭제하고 refresh를 무효화한다. `catch_record.user_id`가 FK가 아니라(plain Long) DB 캐스케이드가 없어 명시 삭제하며(남기면 랭킹에 유령 userId로 집계됨), 도메인 경계를 지켜 `CollectionService`를 통해 삭제한다. 되돌릴 수 없다(소프트 삭제 미도입 → §8).
+- **신원 취득:** body/파라미터로 `userId`를 받지 않는다(IDOR 방지) — §3 참고.
+
 ## 3. 인가 (엔드포인트 정책)
 
 - **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 낚시 스팟·어종 등 열람성 조회(`GET /api/spots/**`, `GET /api/fish/**`), 랭킹(`GET /api/rankings/**`), Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
   - **랭킹은 공개지만 토큰을 보면 더 준다:** 목록·Top3는 누구나 조회 가능하고, `Authorization` 헤더가 있으면 필터가 principal(userId)을 세팅해 컨트롤러가 `me`(내 순위)까지 채운다. 토큰이 없으면 `me: null`.
-- **보호(인증 필요):** 내 도감 조회(`GET /api/collections`, `GET /api/collections/dex`), 어종 도감 인증(`POST /api/collections/verify` 📋), 내 프로필 등 **사용자 소유 리소스**.
+- **보호(인증 필요):** 마이페이지(`GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`, `DELETE /api/users/me`), 내 도감 조회(`GET /api/collections`, `GET /api/collections/dex`), 어종 도감 인증(`POST /api/collections/verify` 📋) 등 **사용자 소유 리소스**.
   - 사용자 소유 리소스는 신원을 **토큰에서만** 얻는다(`@AuthenticationPrincipal`). `userId`를 요청 파라미터로 받지 않는다 — 받으면 남의 리소스를 조회할 수 있다(IDOR).
 - 보호 리소스는 `Authorization: Bearer {accessToken}` 필수. 누락/무효 → `401`.
 - **권한(Role) 구분은 현재 없음** — 전원 일반 사용자다. 관리자(`ADMIN`) 전용 기능(어종/스팟 마스터 데이터 관리 등)이 필요해지면 그때 `users.role` 컬럼과 함께 도입하고, JWT 클레임에 `role`을 추가한다(`403` 권한 부족 처리 포함).
@@ -112,7 +131,7 @@
 
 | 위치 | 담는 것 | 상태 |
 |---|---|---|
-| `domain/user` | `User` 엔티티·`UserRepository`(`existsByUsername` 등) | ✅ |
+| `domain/user` | `User` 엔티티(`changePassword`·`changeNickname`)·`UserRepository`(`existsByUsername`·`existsByNickname` 등), 마이페이지 `UserController`(+Spec)·`UserService`(내 프로필·닉네임·비밀번호 변경·회원탈퇴)·DTO·`UserErrorCode` | ✅ |
 | `domain/auth` | `AuthController`(send-code·verify-code·signup·login·refresh·logout·password/{send-code·verify-code·reset})+`AuthControllerSpec`(Swagger), `EmailVerificationService`(가입 코드 발송·확인)·`AuthService`(가입·로그인·재발급·로그아웃, refresh 저장)·`PasswordResetService`(재설정 코드 발송·확인·비번 교체), 인증 DTO(record)·`AuthErrorCode`, `mail/EmailSender` | ✅ |
 | `global/jwt` | `JwtProvider`(발급·검증), `JwtAuthenticationFilter` | ✅ |
 | `global/security` | `SecurityConfig`(필터 체인·공개/보호 경로), `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`(`401`)·`JwtAccessDeniedHandler`(`403`) | ✅ |
@@ -120,6 +139,8 @@
 
 - 도메인 에러코드는 `domain/auth/exception/AuthErrorCode`(enum, `BaseErrorCode` 구현)로 `A0xx` 접두사 부여. **A001~A010 모두 구현됨 ✅:**
   - `A001 EMAIL_ALREADY_EXISTS`(409), `A002 EMAIL_NOT_VERIFIED`(400), `A003 VERIFICATION_CODE_EXPIRED`(400), `A004 VERIFICATION_CODE_MISMATCH`(400), `A005 NICKNAME_ALREADY_EXISTS`(409), `A006 INVALID_CREDENTIALS`(401), `A007 INVALID_REFRESH_TOKEN`(401), `A008 EMAIL_DOMAIN_NOT_ALLOWED`(400), `A009 EMAIL_NOT_FOUND`(404, 비밀번호 재설정 대상 미가입), `A010 PASSWORD_RESET_NOT_VERIFIED`(400, 재설정 인증 미완료).
+- 마이페이지 에러코드는 `domain/user/exception/UserErrorCode`(enum)로 `U0xx` 접두사 부여. **U001~U004 구현됨 ✅:**
+  - `U001 USER_NOT_FOUND`(404), `U002 INVALID_CURRENT_PASSWORD`(400), `U003 NICKNAME_ALREADY_EXISTS`(409), `U004 SAME_AS_CURRENT_PASSWORD`(400).
 
 ## 6. 예외 처리 (Spring Security) ✅ 구현됨
 
@@ -158,3 +179,4 @@
 - [x] 비밀번호 재설정(찾기) 흐름 도입 여부 → **도입 완료 ✅** (§2-B, `auth:password:*` 네임스페이스로 동일 패턴 복제). 후속 옵션: 재설정용 TTL·한도를 가입용과 분리(`auth.password.*` 키 신설, 현재는 `auth.email.*` 재사용) / send-code를 제네릭 200으로 바꿔 계정 열거 완전 차단.
 - [ ] Access 강제 무효화(로그아웃 즉시 차단) 필요 시 블랙리스트 도입
 - [ ] 닉네임 허용 문자셋·비밀번호 세부 정책 수치 확정
+- [ ] 회원탈퇴 정책 — 현재 **하드 삭제**(§2-C, `users`+`catch_record` 즉시 삭제, 복구 불가). 복구 유예·재가입 제한·개인정보 보관의무가 필요해지면 **소프트 삭제**(상태 컬럼+`@SQLDelete`/`@Where`)로 전환 검토.

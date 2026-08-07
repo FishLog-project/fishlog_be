@@ -12,15 +12,11 @@ public interface FishRepository extends JpaRepository<Fish, Long> {
 
   boolean existsByName(String name);
 
-  /** 전체 도감 목록: 수집 대상 어종만 id 오름차순으로 조회. */
-  List<Fish> findByIsCollectibleTrueOrderByIdAsc();
-
-  /** 전체 도감 어종 수(완성도 랭킹 분모). 수집 대상 어종만 센다. → docs/ranking.md */
-  long countByIsCollectibleTrue();
-
-  /** 어종 상세: 수집 대상 어종을 id로 단건 조회(비수집 종은 조회되지 않음). */
-  Optional<Fish> findByIdAndIsCollectibleTrue(Long id);
-
-  /** 이름 완전일치 검색: 수집 대상 어종을 이름으로 단건 조회(비수집 종은 조회되지 않음). */
-  Optional<Fish> findByNameAndIsCollectibleTrue(String name);
+  /**
+   * 전체 도감 목록: id 오름차순 조회.
+   *
+   * <p>{@code fishes}의 모든 행이 곧 도감이라 별도 필터가 없다(시드에 없는 어종은 로더가 삭제한다). 어종 수(완성도 랭킹 분모)는 {@code
+   * count()}, 단건 조회는 {@code findById()}·{@link #findByName(String)}를 그대로 쓴다. → docs/ranking.md
+   */
+  List<Fish> findAllByOrderByIdAsc();
 }

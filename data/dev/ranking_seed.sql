@@ -1,6 +1,6 @@
 -- ============================================================
 -- 랭킹 검증용 시드 (로컬 전용, 임시 데이터)
--- 전제: 로컬 기동으로 fishes 24종(is_collectible=true)이 적재돼 있어야 함.
+-- 전제: 로컬 기동으로 fishes 24종이 적재돼 있어야 함.
 -- fishes_id는 시드 순서에 따라 달라질 수 있어 '이름 서브쿼리'로 안전하게 참조한다.
 --
 -- ⚠ 로그인 토큰 기반 전환 후: 랭킹/도감이 user_id로 users 테이블에서 닉네임을 조회하므로,
@@ -69,12 +69,12 @@ INSERT INTO catch_record (user_id, fishes_id, certified_image_url, size, created
 -- ============================================================
 
 -- (0) 완성도 분모 확인 (기대: 24)
--- SELECT COUNT(*) FROM fishes WHERE is_collectible = true;
+-- SELECT COUNT(*) FROM fishes;
 
 -- (1) 완성도 랭킹: 사용자별 고유 어종 수 (기대: u2=8, u3=8, u5=6, u1=5, u4=3)
 -- SELECT c.user_id, COUNT(DISTINCT c.fishes_id) AS caught
 -- FROM catch_record c
--- JOIN fishes f ON f.id = c.fishes_id AND f.is_collectible = true
+-- JOIN fishes f ON f.id = c.fishes_id
 -- GROUP BY c.user_id
 -- ORDER BY caught DESC;
 

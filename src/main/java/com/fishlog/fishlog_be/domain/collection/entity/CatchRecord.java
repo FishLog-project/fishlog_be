@@ -22,8 +22,9 @@ import lombok.experimental.SuperBuilder;
  * <p><b>옵션 B(인증 1건 = 1행):</b> "감성돔을 3번 잡음"은 catch_count 컬럼이 아니라 이 테이블의 3개 행으로 표현한다. 잡은 횟수 =
  * (userId, fish)로 묶은 행의 개수(COUNT), 획득 여부 = 그 행의 존재 여부. → docs/spec.md
  *
- * <p>{@code userId}는 아직 User 엔티티/인증이 없어 FK 관계 대신 plain Long으로 둔다(임시). JWT 도입 시 로그인 사용자에서 채우고, 필요하면
- * {@code @ManyToOne User}로 승격한다.
+ * <p>{@code userId}는 조회 시 로그인 토큰({@code @AuthenticationPrincipal})에서 채우지만, 컬럼 자체는 아직 FK 관계가 아닌
+ * plain Long이다. {@code @ManyToOne User} 승격은 스키마 마이그레이션이 필요해 별도 작업으로 남아 있다. → docs/auth-followup.md
+ * §1
  */
 @Entity
 @Getter
@@ -36,7 +37,7 @@ public class CatchRecord extends BaseTimeEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  /** 인증한 사용자. User 엔티티/인증 미구현이라 임시로 plain Long(FK 관계 아님). */
+  /** 인증한 사용자 id. {@code users.id}를 가리키지만 FK 관계는 아직 아니다(plain Long). */
   @Column(name = "user_id", nullable = false)
   private Long userId;
 

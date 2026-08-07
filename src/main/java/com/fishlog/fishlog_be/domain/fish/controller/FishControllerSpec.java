@@ -24,12 +24,12 @@ public interface FishControllerSpec {
       description =
           """
           ### 설명
-          - 수집 대상 어종(`isCollectible=true`) 목록과 총 수(`totalCount`)를 반환합니다.
+          - 전체 도감 어종 목록과 총 수(`totalCount`)를 반환합니다. 확정 24종입니다.
           - 도감 그리드/썸네일 화면용 요약 정보(id·name·imageUrl·rarity)입니다.
           - 정렬은 어종 ID 오름차순으로 고정됩니다.
 
           ### 사용 방법
-          - `GET /api/fish` : 전체 수집 대상 어종 목록.
+          - `GET /api/fish` : 전체 어종 목록.
           - `GET /api/fish?name=감성돔` : 어종명 **완전일치** 검색.
             - `name`은 부분검색/유사검색이 아니라 정확히 일치하는 1건을 찾습니다.
             - 일치하는 어종이 없으면 **에러가 아니라** `200` + `totalCount:0` + 빈 목록을 반환합니다.
