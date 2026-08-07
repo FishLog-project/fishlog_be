@@ -24,17 +24,19 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>{@code spots} : name UNIQUE 기준으로 없으면 생성(있으면 유지 — 운영값 {@code prohibit} 보존).
  *   <li>{@code fishes} : name UNIQUE 기준으로 없으면 생성.
  *   <li>{@code major_fish} : (spot, fish) 조합이 없을 때만 생성.
+ *   <li>정리 : 시드에 없는 스팟은 매핑과 함께 삭제(이름 변경 시 고아 행이 남지 않도록).
  * </ul>
  *
- * 재실행해도 중복이 생기지 않는다. → docs/spec.md "스팟 데이터 설계", docs/external.md §1
+ * 재실행해도 중복이 생기지 않는다.
+ *
+ * <p><b>어종 카탈로그의 최종 기준은 {@link FishContentSeedLoader}다.</b> 여기서 만든 어종이라도 콘텐츠 시드({@code
+ * data/fish/fish_content_seed.json})에 없으면 뒤이어 정리(물리 삭제)된다. 따라서 두 시드의 어종 목록은 일치해야 하며, 어긋나면 매 기동마다
+ * 생성·삭제가 반복되고 정리 단계에서 WARN 이 남는다. → docs/spec.md "스팟 데이터 설계", docs/external.md §1
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class SpotSeedLoader {
-
-  /** 도감(수집) 대상에서 제외할 어종명. catch-all·placeholder는 major_fish 매핑용으로 행은 두되 도감엔 노출하지 않는다. */
-  private static final Set<String> NON_COLLECTIBLE_FISH_NAMES = Set.of("기타어종", "-");
 
   private final SeedDataReader seedDataReader;
   private final SpotRepository spotRepository;
@@ -48,6 +50,30 @@ public class SpotSeedLoader {
     // 아래 upsert 는 name 기준 idempotent 라 재실행해도 중복이 생기지 않는다.
     Map<String, Spot> spotByName = upsertSpots();
     upsertMajorFishes(spotByName);
+    pruneSpots(spotByName.keySet());
+  }
+
+  /**
+   * 시드에 없는 스팟을 삭제한다. 시드 JSON이 스팟 목록의 단일 진실 공급원이므로 {@code spots}를 시드와 일치시킨다.
+   *
+   * <p>스팟 이름이 바뀌면(예: 중복 분리로 {@code 위천} → {@code 위천(1)}·{@code 위천(2)}) upsert 는 새 이름을 만들 뿐 옛 행을 지우지
+   * 않아 고아 스팟이 남는다. 이를 막기 위한 정리 단계다. {@code spots}를 참조하는 것은 {@code major_fish} 뿐이라(사용자 데이터 없음) 어종
+   * 정리와 달리 보류 조건이 없다.
+   */
+  private void pruneSpots(Set<String> seedNames) {
+    int deleted = 0;
+    for (Spot spot : spotRepository.findAll()) {
+      if (seedNames.contains(spot.getName())) {
+        continue;
+      }
+      long unmapped = majorFishRepository.deleteBySpot(spot);
+      spotRepository.delete(spot);
+      deleted++;
+      log.info("[seed] 시드에서 빠진 스팟 삭제: {}(id={}, 매핑 {}건)", spot.getName(), spot.getId(), unmapped);
+    }
+    if (deleted > 0) {
+      log.info("[seed] spots 정리: {}개 삭제", deleted);
+    }
   }
 
   private Map<String, Spot> upsertSpots() {
@@ -79,9 +105,7 @@ public class SpotSeedLoader {
     for (String name : data.fishes()) {
       Fish existing = fishRepository.findByName(name).orElse(null);
       if (existing == null) {
-        boolean collectible = !NON_COLLECTIBLE_FISH_NAMES.contains(name);
-        existing =
-            fishRepository.save(Fish.builder().name(name).isCollectible(collectible).build());
+        existing = fishRepository.save(Fish.builder().name(name).build());
         fishCreated++;
       }
       fishByName.put(name, existing);

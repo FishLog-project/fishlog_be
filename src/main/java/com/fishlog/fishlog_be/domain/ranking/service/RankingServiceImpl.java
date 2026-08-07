@@ -32,7 +32,7 @@ public class RankingServiceImpl implements RankingService {
 
   @Override
   public RankingResponse getCompletionRanking(Long userId) {
-    long totalFishCount = fishRepository.countByIsCollectibleTrue();
+    long totalFishCount = fishRepository.count();
     List<UserFishCount> rows = catchRecordRepository.findCompletionScores(); // 어종 수 내림차순
 
     // 동점 판정을 위해 점수(어종 수)만 뽑아 순위를 계산한다.
