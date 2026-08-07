@@ -3,6 +3,7 @@ package com.fishlog.fishlog_be.domain.user.controller;
 import com.fishlog.fishlog_be.domain.user.dto.MyProfileResponse;
 import com.fishlog.fishlog_be.domain.user.dto.NicknameUpdateRequest;
 import com.fishlog.fishlog_be.domain.user.dto.PasswordUpdateRequest;
+import com.fishlog.fishlog_be.domain.user.dto.WithdrawRequest;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -148,4 +149,47 @@ public interface UserControllerSpec {
   })
   BaseResponse<Void> changePassword(
       @Parameter(hidden = true) Long userId, PasswordUpdateRequest request);
+
+  @Operation(
+      summary = "회원탈퇴",
+      security = @SecurityRequirement(name = "JWT"),
+      description =
+          """
+          ### 설명
+          - 로그인한 사용자가 **현재 비밀번호 확인 후** 계정을 삭제(하드 삭제)합니다.
+          - 사용자의 **도감 인증기록도 함께 삭제**되며, 기존 refresh 토큰이 무효화됩니다(되돌릴 수 없음).
+          - `Authorization: Bearer {accessToken}` 필요.
+
+          ### ⚠ 예외상황
+          - `401`: 인증 토큰 없음/무효
+          - `USER_NOT_FOUND(404)`: 토큰의 사용자가 존재하지 않음
+          - `INVALID_CURRENT_PASSWORD(400)`: 비밀번호 불일치
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "탈퇴 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": true, "code": 200, "message": "회원탈퇴가 완료되었습니다.", "data": null }
+                            """))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "비밀번호 불일치",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 400, "message": "현재 비밀번호가 올바르지 않습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<Void> withdraw(@Parameter(hidden = true) Long userId, WithdrawRequest request);
 }
