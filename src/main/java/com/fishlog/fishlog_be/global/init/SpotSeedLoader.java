@@ -11,6 +11,7 @@ import com.fishlog.fishlog_be.global.init.dto.SpotSeed;
 import com.fishlog.fishlog_be.global.init.dto.SpotSeedData;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>{@code spots} : name UNIQUE 기준으로 없으면 생성(있으면 유지 — 운영값 {@code prohibit} 보존).
  *   <li>{@code fishes} : name UNIQUE 기준으로 없으면 생성.
  *   <li>{@code major_fish} : (spot, fish) 조합이 없을 때만 생성.
+ *   <li>정리 : 시드에 없는 스팟은 매핑과 함께 삭제(이름 변경 시 고아 행이 남지 않도록).
  * </ul>
  *
  * 재실행해도 중복이 생기지 않는다.
@@ -48,6 +50,30 @@ public class SpotSeedLoader {
     // 아래 upsert 는 name 기준 idempotent 라 재실행해도 중복이 생기지 않는다.
     Map<String, Spot> spotByName = upsertSpots();
     upsertMajorFishes(spotByName);
+    pruneSpots(spotByName.keySet());
+  }
+
+  /**
+   * 시드에 없는 스팟을 삭제한다. 시드 JSON이 스팟 목록의 단일 진실 공급원이므로 {@code spots}를 시드와 일치시킨다.
+   *
+   * <p>스팟 이름이 바뀌면(예: 중복 분리로 {@code 위천} → {@code 위천(1)}·{@code 위천(2)}) upsert 는 새 이름을 만들 뿐 옛 행을 지우지
+   * 않아 고아 스팟이 남는다. 이를 막기 위한 정리 단계다. {@code spots}를 참조하는 것은 {@code major_fish} 뿐이라(사용자 데이터 없음) 어종
+   * 정리와 달리 보류 조건이 없다.
+   */
+  private void pruneSpots(Set<String> seedNames) {
+    int deleted = 0;
+    for (Spot spot : spotRepository.findAll()) {
+      if (seedNames.contains(spot.getName())) {
+        continue;
+      }
+      long unmapped = majorFishRepository.deleteBySpot(spot);
+      spotRepository.delete(spot);
+      deleted++;
+      log.info("[seed] 시드에서 빠진 스팟 삭제: {}(id={}, 매핑 {}건)", spot.getName(), spot.getId(), unmapped);
+    }
+    if (deleted > 0) {
+      log.info("[seed] spots 정리: {}개 삭제", deleted);
+    }
   }
 
   private Map<String, Spot> upsertSpots() {
