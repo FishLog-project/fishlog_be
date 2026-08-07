@@ -25,26 +25,22 @@ public interface CatchRecordRepository extends JpaRepository<CatchRecord, Long> 
   boolean existsByFish_Id(Long fishId);
 
   /**
-   * 특정 사용자가 한 번이라도 인증한 <b>수집 대상</b> 어종의 id 집합(중복 제거).
+   * 특정 사용자가 한 번이라도 인증한 어종의 id 집합(중복 제거).
    *
-   * <p>내 도감 그리드에서 각 칸의 잡음/못잡음을 O(1)로 판정하기 위한 소스다. 같은 어종을 여러 번 잡아도 id 하나로 접히며, 논리 삭제된 어종({@code
-   * is_collectible=false})은 도감에 없으므로 제외한다. → docs/ranking.md
+   * <p>내 도감 그리드에서 각 칸의 잡음/못잡음을 O(1)로 판정하기 위한 소스다. 같은 어종을 여러 번 잡아도 id 하나로 접힌다. → docs/ranking.md
    */
-  @Query(
-      "SELECT DISTINCT c.fish.id FROM CatchRecord c "
-          + "WHERE c.userId = :userId AND c.fish.isCollectible = true")
+  @Query("SELECT DISTINCT c.fish.id FROM CatchRecord c WHERE c.userId = :userId")
   List<Long> findDistinctCaughtFishIds(@Param("userId") Long userId);
 
   /**
-   * 완성도 랭킹: 사용자별 고유 수집대상 어종 수를 내림차순으로 집계한다.
+   * 완성도 랭킹: 사용자별 고유 어종 수를 내림차순으로 집계한다.
    *
-   * <p>같은 어종을 여러 번 인증하면 여러 행이므로 {@code COUNT(DISTINCT fish.id)}로 세고, 비수집 종({@code
-   * is_collectible=false})은 도감 분모에 없으므로 분자에서도 제외한다. → docs/ranking.md
+   * <p>같은 어종을 여러 번 인증하면 여러 행이므로 {@code COUNT(DISTINCT fish.id)}로 센다. 분모({@code fishes} 전체 수)와 같은
+   * 집합을 세므로 완성도가 100%를 넘지 않는다. → docs/ranking.md
    */
   @Query(
       "SELECT c.userId AS userId, COUNT(DISTINCT c.fish.id) AS fishCount "
           + "FROM CatchRecord c "
-          + "WHERE c.fish.isCollectible = true "
           + "GROUP BY c.userId "
           + "ORDER BY COUNT(DISTINCT c.fish.id) DESC")
   List<UserFishCount> findCompletionScores();

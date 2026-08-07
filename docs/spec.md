@@ -130,13 +130,13 @@
 
 ### 전체 도감 (어종 카탈로그) ✅
 
-**`GET /api/fish`** — 전체 도감 목록 / 이름 검색. 공개. 페이징 없음, `id` 오름차순. `is_collectible=true` 인 수집 대상 어종만 반환.
+**`GET /api/fish`** — 전체 도감 목록 / 이름 검색. 공개. 페이징 없음, `id` 오름차순. `fishes`의 **모든 행**(확정 24종)을 반환한다.
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | `name` | String | 선택 | 어종명 **완전일치** 검색. 있으면 일치 어종만(0~1건), 없거나 공백이면 전체 목록. |
 
-- `name` 검색 시에도 `is_collectible=false`인 어종은 조회되지 않는다(시드에서 빠졌으나 인증 기록이 있어 논리 삭제로 남은 어종).
+- `name` 검색은 `fishes` 전체를 대상으로 한다. 도감에서 숨겨진 어종이라는 개념이 없기 때문이다(아래 "`is_collectible` 제거" 참고).
 - 일치하는 어종이 없으면 **404가 아니라 `200 + 빈 목록`**(`totalCount:0`). 컬렉션 필터이므로 "조건에 맞는 것 없음"은 정상 응답이다(단건 지목인 `GET /api/fish/{id}`의 404와 대비).
 
 ```json
@@ -155,7 +155,7 @@
 
 `GET /api/fish?name=감성돔` → `totalCount:1` + 감성돔 1건. `GET /api/fish?name=없는어종` → `totalCount:0` + 빈 목록.
 
-**`GET /api/fish/{id}`** — 어종 상세. 공개. `is_collectible=true` 인 어종만 조회되며, 없거나 비수집 종이면 404(`F001` 해당 어종을 찾을 수 없습니다.).
+**`GET /api/fish/{id}`** — 어종 상세. 공개. 해당 id가 없으면 404(`F001` 해당 어종을 찾을 수 없습니다.).
 
 ```json
 {
@@ -198,8 +198,15 @@
   - 단, 위 실측은 7일 스냅샷 기준이라 **계절 단위 변동 가능성**은 열려 있음 → 주기적(예: 월 1회) 재수집으로 `major_fish` 갱신 권장.
 - **`기타어종` 처리 ✅(확정 — 정책 변경됨):** 바다낚시지수 API의 catch-all 카테고리 `기타어종`은 특정 어종이 아니라 도감 항목으로 부적절하다. 확정 데이터셋이 이를 **실제 24종으로 대체**해 시드에서 빠졌으므로, **DB에서도 제거**한다.
   - **과거 정책:** `is_collectible=false`로 숨기고 행은 보존(`SpotSeedLoader.NON_COLLECTIBLE_FISH_NAMES`).
-  - **현행 정책:** 콘텐츠 시드에 없는 어종은 `FishContentSeedLoader`의 **정리(prune) 단계에서 물리 삭제**된다(아래 "어종 도감 콘텐츠 시드" 참고). `NON_COLLECTIBLE_FISH_NAMES` 제외 집합은 이 정책과 충돌해 **제거**했다 — "숨겨서 보존"과 "시드에 없으면 삭제"가 공존하면 매 기동 생성·삭제가 반복되기 때문이다.
-  - 따라서 `is_collectible=false`는 이제 **인증 기록이 있어 지울 수 없는 어종**에만 남는 상태다.
+  - **현행 정책:** 콘텐츠 시드에 없는 어종은 `FishContentSeedLoader`의 **정리(prune) 단계에서 삭제**된다(아래 "어종 도감 콘텐츠 시드" 참고). `NON_COLLECTIBLE_FISH_NAMES` 제외 집합은 이 정책과 충돌해 **제거**했다 — "숨겨서 보존"과 "시드에 없으면 삭제"가 공존하면 매 기동 생성·삭제가 반복되기 때문이다.
+
+- **`is_collectible` 컬럼 제거 ✅(확정):** 어종을 **확정 24종**으로 고정하고 시드에 없는 어종은 삭제하기로 하면서, "행은 두되 도감에서 숨긴다"는 상태 자체가 사라졌다. 팀이 채택한 적 없는 컬럼이기도 해 **엔티티·쿼리·DB 컬럼에서 모두 제거**한다.
+  - **`fishes`의 모든 행 = 전체 도감.** 도감 목록·상세·완성도 분모 모두 별도 필터 없이 테이블 전체를 쓴다(`findAllByOrderByIdAsc()`, `count()`, `findById()`).
+  - ⚠️ **DDL은 자동 반영되지 않는다.** `ddl-auto=update`는 컬럼을 **추가만 하고 삭제하지 않으므로**, 배포 시 아래를 1회 수동 실행해야 한다.
+
+    ```sql
+    ALTER TABLE fishes DROP COLUMN is_collectible;
+    ```
   - **플레이스홀더 `-` 제외 ✅:** 대상어종 없음(`-`)은 실어종이 아니므로 `major_fish` 시드에서 제외한다.
 - **대상 어종 없는 스팟 = 빈 값 허용 ✅(확정):** 스팟의 `major_fish` 매핑이 **0건**이어도 무방하며, 상세 응답의 "주요 대상 어종"은 **빈 값(정보 없음)** 으로 처리한다. (확정 데이터셋에서는 전 스팟이 최소 3종을 가지므로 현재 0건인 스팟은 없다. 예전 바다낚시지수 단독 시드에서는 선상 오프셋 지명 스팟 15개가 여기 해당했다.)
 - **호출 효율/캐싱 ✅:** 예보(낚시지수·날씨·물때)는 API가 스팟 단건 필터 없이 `gubun`별 전체(약 1,750건)를 페이지네이션으로 반환 → 상세 요청마다 원본 호출은 지연·쿼터 위험. **Redis 캐시, 반나절 TTL로 확정**(예보 주기가 `predcYmd`+`predcNoonSeCd`로 굵음). 전체 예보를 캐시하고 상세는 `seafsPstnNm`으로 필터해 서빙.
@@ -294,9 +301,8 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - **미해결 이름은 스킵 ✅:** 시드에 있으나 DB에 없는 어종명은 `WARN` 로그 후 건너뛴다(예외 아님).
 - **정리(prune) = 물리 삭제 + 인증 기록 가드 ✅(확정):** 콘텐츠 시드가 도감 카탈로그의 단일 진실 공급원이므로, **시드에 없는 어종은 `fishes`에서 삭제**해 테이블이 시드와 정확히 일치하게 만든다(기동마다 실행).
   - 삭제 전 `major_fish`의 FK 참조를 먼저 끊는다(`MajorFishRepository.deleteByFish`). 삭제된 매핑 건수가 0보다 크면 스팟 시드가 아직 그 어종을 참조한다는 뜻이라 `WARN`을 남긴다.
-  - **⚠️ 인증 기록 가드:** 그 어종에 `catch_record`가 **하나라도 있으면 삭제하지 않고** `is_collectible=false`로만 내린다(`WARN`). 어종 행을 지우면 사용자가 인증한 기록까지 사라지기 때문이다. 이 경우 행은 남고 도감·완성도 랭킹에서만 빠진다.
-  - 이전에 논리 삭제됐던 어종을 다시 시드에 넣으면 `Fish.markCollectible()`로 복구된다.
-  - 로그: `[seed] 어종 콘텐츠: 총 N건 (신규 N / 갱신 N / 삭제 N / 논리삭제 N)`. **배포 후 이 줄로 정리 결과를 확인**한다.
+  - **⚠️ 인증 기록 가드:** 그 어종에 `catch_record`가 **하나라도 있으면 삭제를 보류**하고 `WARN`만 남긴다. 어종 행을 지우면 사용자가 인증한 기록까지 사라지기 때문이다. 숨김 플래그가 없으므로 **그 어종은 시드에 없는데도 도감에 그대로 남는다** — WARN을 보면 시드를 되돌리거나 기록 이관 여부를 결정해야 한다. 확정 24종에서는 발생하지 않는 경로다.
+  - 로그: `[seed] 어종 콘텐츠: 총 N건 (신규 N / 갱신 N / 삭제 N / 삭제보류 N)`. **배포 후 이 줄로 정리 결과를 확인**한다.
 
 ## 사용자 도감 (어종 인증) — `catch_record` ✅
 
@@ -377,7 +383,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
 | `users` | 사용자 | `id`, `username`(email, UNIQUE), `password_hash`, `nickname`(UNIQUE) |
-| `fishes` | 어종(도감 기준) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD), `is_collectible`(default true, 도감 노출 여부) |
+| `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit` |

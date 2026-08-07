@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ul>
  *   <li>{@code spots} : name UNIQUE 기준으로 없으면 생성(있으면 유지 — 운영값 {@code prohibit} 보존).
- *   <li>{@code fishes} : name UNIQUE 기준으로 없으면 생성({@code isCollectible=true}).
+ *   <li>{@code fishes} : name UNIQUE 기준으로 없으면 생성.
  *   <li>{@code major_fish} : (spot, fish) 조합이 없을 때만 생성.
  * </ul>
  *
@@ -79,7 +79,7 @@ public class SpotSeedLoader {
     for (String name : data.fishes()) {
       Fish existing = fishRepository.findByName(name).orElse(null);
       if (existing == null) {
-        existing = fishRepository.save(Fish.builder().name(name).isCollectible(true).build());
+        existing = fishRepository.save(Fish.builder().name(name).build());
         fishCreated++;
       }
       fishByName.put(name, existing);

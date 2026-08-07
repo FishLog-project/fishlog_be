@@ -24,11 +24,10 @@ public class FishServiceImpl implements FishService {
     // 두 경로 모두 최종적으로 List<Fish> 를 FishListResponse.of(...) 로 감싸 응답 형태를 통일한다.
     List<Fish> fishes;
     if (name == null || name.isBlank()) {
-      fishes = fishRepository.findByIsCollectibleTrueOrderByIdAsc();
+      fishes = fishRepository.findAllByOrderByIdAsc();
     } else {
       // 이름 완전일치: 있으면 1건 리스트, 없으면 빈 리스트(예외 아님 → 200 + totalCount:0).
-      fishes =
-          fishRepository.findByNameAndIsCollectibleTrue(name).map(List::of).orElseGet(List::of);
+      fishes = fishRepository.findByName(name).map(List::of).orElseGet(List::of);
     }
     return FishListResponse.of(fishes);
   }
@@ -37,7 +36,7 @@ public class FishServiceImpl implements FishService {
   public FishDetailResponse getFishDetail(Long id) {
     Fish fish =
         fishRepository
-            .findByIdAndIsCollectibleTrue(id)
+            .findById(id)
             .orElseThrow(() -> new CustomException(FishErrorCode.FISH_NOT_FOUND));
     return FishDetailResponse.from(fish);
   }

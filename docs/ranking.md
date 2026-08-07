@@ -27,7 +27,7 @@
 | 필요한 것 | 현재 상태 | 판정 |
 |---|---|---|
 | 완성도 분자(내 고유 어종 수) | `catch_record`에서 `COUNT(DISTINCT fishes_id)` (옵션 B 설계) | ✅ 가능 |
-| 완성도 분모(전체 어종 수) | `fishes WHERE is_collectible=true`의 `COUNT` (기존 `FishRepository` 재사용) | ✅ 가능 |
+| 완성도 분모(전체 어종 수) | `fishes`의 `COUNT` (기존 `FishRepository` 재사용) | ✅ 가능 |
 | 크기 점수(내 최대 크기) | `catch_record.size`가 이미 **`NOT NULL Double`**로 적재 중(CatchRecord.java) | ✅ 가능 |
 | 사용자 목록 집계 | `catch_record`를 `user_id`로 `GROUP BY` | ✅ 가능 |
 
@@ -104,7 +104,7 @@
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `metric` | String | `"COMPLETION"` 고정 |
-| `totalFishCount` | int | 전체 도감 어종 수(완성도 분모, `is_collectible=true` 총계) |
+| `totalFishCount` | int | 전체 도감 어종 수(완성도 분모, `fishes` 총계 — 확정 24종) |
 | `me` | object\|null | 본인 순위 블록. **비로그인(토큰 미전달) 시 `null`** |
 | `me.rank` | int\|null | 전체에서 내 순위. 기록 없으면 `null` |
 | `me.caughtCount` | int | 내가 인증한 **고유** 수집대상 어종 수 |
@@ -164,10 +164,9 @@
 ```sql
 SELECT cr.user_id AS userId, COUNT(DISTINCT cr.fishes_id) AS caughtCount
 FROM catch_record cr
-JOIN fishes f ON f.id = cr.fishes_id AND f.is_collectible = true
 GROUP BY cr.user_id
 ORDER BY caughtCount DESC;
--- 분모(totalFishCount)는 FishRepository로 별도 조회: COUNT(*) WHERE is_collectible = true
+-- 분모(totalFishCount)는 FishRepository로 별도 조회: COUNT(*) FROM fishes
 ```
 
 **크기 랭킹 (사용자별 최대 크기)**
@@ -180,7 +179,7 @@ ORDER BY maxSize DESC;
 ```
 
 - **완성도 분자는 반드시 `DISTINCT fishes_id`**: 옵션 B에서 같은 어종 3번 인증 = 3행이지만 도감 완성도는 1칸이다. `DISTINCT` 없으면 완성도가 과대 계산된다.
-- **완성도 분자도 `is_collectible=true`만**: `기타어종` 같은 비수집 종은 전체 도감 분모에 없으므로 분자에서도 제외해야 완성도 100% 초과가 안 생긴다.
+- **분자·분모가 같은 집합**: `fishes`의 모든 행이 곧 도감이므로(`is_collectible` 제거 → `docs/spec.md`) 분자에 별도 필터가 필요 없다. `catch_record.fishes_id`는 `fishes`를 참조하는 FK라 분모에 없는 어종이 분자에 낄 수 없고, 따라서 완성도가 100%를 넘지 않는다.
 - **rank 부여**: DB `RANK()` 윈도우 함수 대신, 정렬된 결과를 **서비스 계층에서 순번 매김**(동점 처리 정책을 코드로 명시하기 위함, 아래).
 
 ---
@@ -222,7 +221,7 @@ domain/ranking
 ```
 
 - **`exception` 패키지 없음:** 랭킹은 조회 전용이고 "순위 없음"도 정상 상태(200)라 **도메인 에러 코드가 필요한 실패 경로가 없다.** `docs/architecture.md`의 "없는 레이어의 빈 패키지는 만들지 않는다" 규칙에 따라 만들지 않았다. 실패 케이스가 생기면 그때 `RankingErrorCode`(접두사 `R001`)를 추가한다.
-- **집계 쿼리는 `CatchRecordRepository`에 추가**했다(`findCompletionScores`·`findMaxSizeScores`, projection은 `UserFishCount`·`UserMaxSize`). 완성도 분모는 `FishRepository.countByIsCollectibleTrue()`, 닉네임은 `UserRepository.findAllById()`로 조회한다.
+- **집계 쿼리는 `CatchRecordRepository`에 추가**했다(`findCompletionScores`·`findMaxSizeScores`, projection은 `UserFishCount`·`UserMaxSize`). 완성도 분모는 `FishRepository.count()`, 닉네임은 `UserRepository.findAllById()`로 조회한다.
 - 엔티티는 새로 만들지 않는다(파생 집계만). → `entity`/신규 테이블 없음.
 
 > ⚠️ **레이어 규칙 예외:** `RankingServiceImpl`이 `collection`·`fish`·`user`의 **리포지토리를 직접** 참조한다. `docs/architecture.md`의 "상대 도메인의 repository·entity에 직접 접근하지 않는다" 규칙과 어긋나는 지점으로, 랭킹이 순수 파생 집계라 서비스 경유가 과했다는 판단에서 나온 의도적 선택이다. 도메인 간 결합이 더 늘어나면 각 도메인의 조회 서비스 인터페이스 경유로 정리한다 📋.
