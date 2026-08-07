@@ -17,6 +17,9 @@
 | ✅ | POST | `/api/auth/password/send-code` | 비밀번호 재설정 인증코드 발송(가입자만) | 공개 |
 | ✅ | POST | `/api/auth/password/verify-code` | 비밀번호 재설정 인증코드 확인 | 공개 |
 | ✅ | POST | `/api/auth/password/reset` | 비밀번호 재설정(새 비번 교체 + 기존 세션 무효화) | 공개 |
+| ✅ | GET | `/api/users/me` | 내 프로필 조회(마이페이지, 이메일·닉네임) | 보호 |
+| ✅ | PATCH | `/api/users/me/nickname` | 닉네임 변경(마이페이지) | 보호 |
+| ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
 | 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
 | ✅ | GET | `/api/fish` | 전체 도감 목록(수집 대상 어종 + 총 수). `?name=`으로 이름 완전일치 검색 | 공개 |
@@ -127,6 +130,36 @@
 ```
 - 인증완료 플래그 없으면 `400 PASSWORD_RESET_NOT_VERIFIED`, 사용자 미존재 시 `404 EMAIL_NOT_FOUND`.
 - 성공 시 비밀번호 BCrypt 재해시 저장 → 인증완료 플래그 소비 → **기존 refresh(`auth:refresh:{userId}`) 삭제**(세션 무효화). **토큰은 발급하지 않으며** 새 비밀번호로 다시 로그인한다.
+
+### 마이페이지 (`/api/users`) ✅
+
+로그인 사용자 본인의 프로필 조회·수정. 모두 **보호 엔드포인트**(`Authorization: Bearer {accessToken}` 필요)이며, 대상은 토큰의 사용자(`@AuthenticationPrincipal`)로 식별한다(요청 body/파라미터로 userId를 받지 않음). 도메인 에러코드는 `U0xx`(`docs/security.md` §5). 비로그인 "비밀번호 찾기"(`/api/auth/password/*`)와 별개다.
+
+#### `GET /api/users/me` — 내 프로필 조회 ✅
+```jsonc
+// Response(data)
+{ "userId": 1, "email": "angler@gmail.com", "nickname": "붕어킬러" }
+```
+- 토큰의 사용자가 없으면 `404 USER_NOT_FOUND`, 미인증 `401`.
+
+#### `PATCH /api/users/me/nickname` — 닉네임 변경 ✅
+```jsonc
+// Request
+{ "nickname": "감성돔사냥꾼" }   // 2~10자, 유니크
+// Response
+// data: null
+```
+- 현재 닉네임과 동일하면 변경 없이 성공(no-op). 중복이면 `409 NICKNAME_ALREADY_EXISTS`.
+
+#### `PATCH /api/users/me/password` — 비밀번호 변경 ✅
+```jsonc
+// Request
+{ "currentPassword": "fishlog1234", "newPassword": "fishlog5678" }   // new: 8자 이상, 영문+숫자
+// Response
+// data: null
+```
+- 현재 비밀번호 불일치 `400 INVALID_CURRENT_PASSWORD`, 새 비번이 현재와 동일 `400 SAME_AS_CURRENT_PASSWORD`.
+- 성공 시 새 비번 BCrypt 재해시 저장 → **기존 refresh(`auth:refresh:{userId}`) 삭제**(세션 무효화) → 새 비밀번호로 재로그인 필요.
 
 ### 전체 도감 (어종 카탈로그) ✅
 
