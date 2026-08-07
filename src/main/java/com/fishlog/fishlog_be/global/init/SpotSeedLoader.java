@@ -43,13 +43,9 @@ public class SpotSeedLoader {
 
   @Transactional
   public void load() {
-    // 안전장치: 이미 적재돼 있으면 건너뛴다("1회만" 운용을 코드로 보장).
-    // 재적재는 어차피 idempotent(신규 0건)지만, 불필요한 전체 조회를 막는다.
-    long existing = spotRepository.count();
-    if (existing > 0) {
-      log.info("[seed] 이미 적재됨(spots={}개) → 건너뜀", existing);
-      return;
-    }
+    // 매 기동마다 돈다. 예전에는 "spots 가 1건이라도 있으면 통째로 건너뛴다"는 가드가 있었으나,
+    // 그러면 이미 적재된 DB에 시드가 늘어나도(49곳 → 95곳) 새 스팟이 영영 반영되지 않는다.
+    // 아래 upsert 는 name 기준 idempotent 라 재실행해도 중복이 생기지 않는다.
     Map<String, Spot> spotByName = upsertSpots();
     upsertMajorFishes(spotByName);
   }

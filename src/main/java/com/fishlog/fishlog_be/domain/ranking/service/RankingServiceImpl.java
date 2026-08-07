@@ -7,8 +7,12 @@ import com.fishlog.fishlog_be.domain.fish.repository.FishRepository;
 import com.fishlog.fishlog_be.domain.ranking.dto.RankingEntryResponse;
 import com.fishlog.fishlog_be.domain.ranking.dto.RankingResponse;
 import com.fishlog.fishlog_be.domain.ranking.dto.RankingType;
+import com.fishlog.fishlog_be.domain.user.entity.User;
+import com.fishlog.fishlog_be.domain.user.repository.UserRepository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +28,7 @@ public class RankingServiceImpl implements RankingService {
 
   private final CatchRecordRepository catchRecordRepository;
   private final FishRepository fishRepository;
+  private final UserRepository userRepository;
 
   @Override
   public RankingResponse getCompletionRanking(Long userId) {
@@ -34,19 +39,26 @@ public class RankingServiceImpl implements RankingService {
     List<Double> scores = rows.stream().map(r -> (double) r.getFishCount()).toList();
     int[] ranks = computeRanks(scores);
 
+    // 랭킹에 오른 사용자들의 닉네임을 한 번에 조회(집계당 쿼리 1회, N+1 없음).
+    Map<Long, String> nicknames = nicknamesOf(rows.stream().map(UserFishCount::getUserId).toList());
+
     List<RankingEntryResponse> rankings = new ArrayList<>();
     for (int i = 0; i < rows.size(); i++) {
       UserFishCount row = rows.get(i);
       int caught = (int) row.getFishCount();
       rankings.add(
           RankingEntryResponse.completion(
-              ranks[i], row.getUserId(), caught, completionRate(caught, totalFishCount)));
+              ranks[i],
+              row.getUserId(),
+              nicknames.get(row.getUserId()),
+              caught,
+              completionRate(caught, totalFishCount)));
     }
 
     RankingEntryResponse me = findMe(rankings, userId);
     if (me == null && userId != null) {
-      // 인증 기록이 없는 사용자: 순위 없음(rank=null), 완성도 0%.
-      me = RankingEntryResponse.completion(null, userId, 0, 0.0);
+      // 인증 기록이 없는 로그인 사용자: 순위 없음(rank=null), 완성도 0%. 닉네임은 users에서 조회.
+      me = RankingEntryResponse.completion(null, userId, nicknameOf(userId), 0, 0.0);
     }
 
     return new RankingResponse(
@@ -60,19 +72,37 @@ public class RankingServiceImpl implements RankingService {
     List<Double> scores = rows.stream().map(UserMaxSize::getMaxSize).toList();
     int[] ranks = computeRanks(scores);
 
+    Map<Long, String> nicknames = nicknamesOf(rows.stream().map(UserMaxSize::getUserId).toList());
+
     List<RankingEntryResponse> rankings = new ArrayList<>();
     for (int i = 0; i < rows.size(); i++) {
       UserMaxSize row = rows.get(i);
-      rankings.add(RankingEntryResponse.size(ranks[i], row.getUserId(), row.getMaxSize()));
+      rankings.add(
+          RankingEntryResponse.size(
+              ranks[i], row.getUserId(), nicknames.get(row.getUserId()), row.getMaxSize()));
     }
 
     RankingEntryResponse me = findMe(rankings, userId);
     if (me == null && userId != null) {
-      // 인증 기록이 없는 사용자: 순위 없음(rank=null), 최대 크기 없음(null).
-      me = RankingEntryResponse.size(null, userId, null);
+      // 인증 기록이 없는 로그인 사용자: 순위 없음(rank=null), 최대 크기 없음(null).
+      me = RankingEntryResponse.size(null, userId, nicknameOf(userId), null);
     }
 
     return new RankingResponse(RankingType.SIZE, null, me, top3(rankings), rankings);
+  }
+
+  /** 랭킹에 오른 사용자 id 목록의 닉네임을 한 번에 조회해 map으로 만든다(찾지 못한 id는 없음). */
+  private Map<Long, String> nicknamesOf(List<Long> userIds) {
+    if (userIds.isEmpty()) {
+      return Map.of();
+    }
+    return userRepository.findAllById(userIds).stream()
+        .collect(Collectors.toMap(User::getId, User::getNickname));
+  }
+
+  /** 단일 사용자의 닉네임. 사용자를 찾지 못하면 null. */
+  private String nicknameOf(Long userId) {
+    return userRepository.findById(userId).map(User::getNickname).orElse(null);
   }
 
   /**

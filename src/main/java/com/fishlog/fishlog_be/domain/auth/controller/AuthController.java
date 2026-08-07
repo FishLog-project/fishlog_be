@@ -5,12 +5,14 @@ import com.fishlog.fishlog_be.domain.auth.dto.EmailSendCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.EmailVerifyCodeResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.LoginRequest;
+import com.fishlog.fishlog_be.domain.auth.dto.PasswordResetRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.RefreshRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.SignupRequest;
 import com.fishlog.fishlog_be.domain.auth.dto.SignupResponse;
 import com.fishlog.fishlog_be.domain.auth.dto.TokenResponse;
 import com.fishlog.fishlog_be.domain.auth.service.AuthService;
 import com.fishlog.fishlog_be.domain.auth.service.EmailVerificationService;
+import com.fishlog.fishlog_be.domain.auth.service.PasswordResetService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,7 @@ public class AuthController implements AuthControllerSpec {
 
   private final EmailVerificationService emailVerificationService;
   private final AuthService authService;
+  private final PasswordResetService passwordResetService;
 
   @Override
   @PostMapping("/email/send-code")
@@ -69,5 +72,28 @@ public class AuthController implements AuthControllerSpec {
   public BaseResponse<Void> logout(@AuthenticationPrincipal Long userId) {
     authService.logout(userId);
     return BaseResponse.success("로그아웃되었습니다.", null);
+  }
+
+  @Override
+  @PostMapping("/password/send-code")
+  public BaseResponse<EmailSendCodeResponse> sendPasswordResetCode(
+      @Valid @RequestBody EmailSendCodeRequest request) {
+    long ttl = passwordResetService.sendCode(request.email());
+    return BaseResponse.success("비밀번호 재설정 인증코드를 발송했습니다.", new EmailSendCodeResponse(ttl));
+  }
+
+  @Override
+  @PostMapping("/password/verify-code")
+  public BaseResponse<EmailVerifyCodeResponse> verifyPasswordResetCode(
+      @Valid @RequestBody EmailVerifyCodeRequest request) {
+    long ttl = passwordResetService.verifyCode(request.email(), request.code());
+    return BaseResponse.success("인증이 완료되었습니다.", new EmailVerifyCodeResponse(ttl));
+  }
+
+  @Override
+  @PostMapping("/password/reset")
+  public BaseResponse<Void> resetPassword(@Valid @RequestBody PasswordResetRequest request) {
+    passwordResetService.resetPassword(request.email(), request.newPassword());
+    return BaseResponse.success("비밀번호가 재설정되었습니다.", null);
   }
 }

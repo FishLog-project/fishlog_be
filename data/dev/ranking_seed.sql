@@ -1,8 +1,22 @@
 -- ============================================================
--- 랭킹 검증용 catch_record 시드 (로컬 전용, 임시 데이터)
+-- 랭킹 검증용 시드 (로컬 전용, 임시 데이터)
 -- 전제: 로컬 기동으로 fishes 24종(is_collectible=true)이 적재돼 있어야 함.
 -- fishes_id는 시드 순서에 따라 달라질 수 있어 '이름 서브쿼리'로 안전하게 참조한다.
+--
+-- ⚠ 로그인 토큰 기반 전환 후: 랭킹/도감이 user_id로 users 테이블에서 닉네임을 조회하므로,
+--   catch_record의 user_id(1~5)와 짝이 맞는 users 행을 함께 심어야 nickname이 채워진다.
+--   5명 모두 비밀번호는 test1234 (BCrypt 해시). 예: user2@test.com / test1234 로 로그인하면
+--   그 토큰으로 /api/rankings/* 호출 시 me(본인 순위)까지 확인 가능.
 -- ============================================================
+
+-- users 1~5 : 랭킹에 등장하는 사용자. id를 명시해 catch_record.user_id와 맞춘다.
+-- password_hash 는 평문 'test1234' 의 BCrypt($2a$10$) 해시(모두 동일).
+INSERT INTO users (id, username, password_hash, nickname, created_at, modified_at) VALUES
+(1, 'user1@test.com', '$2a$10$v5/ewvBYLiuLOp0u/P2H7equcCTZXIGR9xbbt6qXr10m49nc5i9qe', '낚시왕',    NOW(), NOW()),
+(2, 'user2@test.com', '$2a$10$v5/ewvBYLiuLOp0u/P2H7equcCTZXIGR9xbbt6qXr10m49nc5i9qe', '바다사랑',  NOW(), NOW()),
+(3, 'user3@test.com', '$2a$10$v5/ewvBYLiuLOp0u/P2H7equcCTZXIGR9xbbt6qXr10m49nc5i9qe', '손맛장인',  NOW(), NOW()),
+(4, 'user4@test.com', '$2a$10$v5/ewvBYLiuLOp0u/P2H7equcCTZXIGR9xbbt6qXr10m49nc5i9qe', '대물헌터',  NOW(), NOW()),
+(5, 'user5@test.com', '$2a$10$v5/ewvBYLiuLOp0u/P2H7equcCTZXIGR9xbbt6qXr10m49nc5i9qe', '초보강태공', NOW(), NOW());
 
 -- user 1 : 고유 5종 + 감성돔 '중복 인증'(총 6행) → COUNT(DISTINCT) 검증용. max size 45.0
 INSERT INTO catch_record (user_id, fishes_id, certified_image_url, size, created_at, modified_at) VALUES
@@ -71,6 +85,7 @@ INSERT INTO catch_record (user_id, fishes_id, certified_image_url, size, created
 -- ORDER BY max_size DESC;
 
 -- ============================================================
--- 초기화 (다시 넣고 싶을 때)
+-- 초기화 (다시 넣고 싶을 때) — catch_record 를 먼저, 그다음 users
 -- DELETE FROM catch_record WHERE user_id BETWEEN 1 AND 5;
+-- DELETE FROM users WHERE id BETWEEN 1 AND 5;
 -- ============================================================

@@ -4,9 +4,9 @@ import com.fishlog.fishlog_be.domain.ranking.dto.RankingResponse;
 import com.fishlog.fishlog_be.domain.ranking.service.RankingService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -22,14 +22,13 @@ public class RankingController implements RankingControllerSpec {
 
   @Override
   @GetMapping("/completion")
-  public BaseResponse<RankingResponse> getCompletionRanking(
-      @RequestParam(required = false) Long userId) {
+  public BaseResponse<RankingResponse> getCompletionRanking(@AuthenticationPrincipal Long userId) {
     return BaseResponse.success(rankingService.getCompletionRanking(userId));
   }
 
   @Override
   @GetMapping("/size")
-  public BaseResponse<RankingResponse> getSizeRanking(@RequestParam(required = false) Long userId) {
+  public BaseResponse<RankingResponse> getSizeRanking(@AuthenticationPrincipal Long userId) {
     return BaseResponse.success(rankingService.getSizeRanking(userId));
   }
 }

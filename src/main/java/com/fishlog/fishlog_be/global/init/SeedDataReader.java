@@ -14,9 +14,9 @@ import org.springframework.stereotype.Component;
 /**
  * 낚시 스팟 시드 JSON 파일을 읽어 DTO 로 역직렬화한다.
  *
- * <p>수집기(data/spot/seed.py)가 생성한 {@code spots_seed.json}, {@code spot_fish_seed.json}을 읽는다. 위치는
- * {@code fishlog.seed.*-location} 프로퍼티로 재정의할 수 있으며(기본값은 프로젝트 상대 경로 file:), Spring {@link
- * ResourceLoader} 규칙에 따라 {@code classpath:}·{@code file:} 접두사를 지원한다.
+ * <p>생성기(data/spot/build_seed.py)가 {@code spot_master.json}으로부터 만든 {@code spots_seed.json}, {@code
+ * spot_fish_seed.json}을 읽는다. 위치는 {@code fishlog.seed.*-location} 프로퍼티로 재정의할 수 있으며(기본값은 프로젝트 상대 경로
+ * file:), Spring {@link ResourceLoader} 규칙에 따라 {@code classpath:}·{@code file:} 접두사를 지원한다.
  *
  * <p>실제 DB 적재는 엔티티/레포지토리(#12) 이후 {@link SeedDataInitializer}에서 수행한다. → docs/external.md §1
  */
@@ -60,7 +60,7 @@ public class SeedDataReader {
     Resource resource = resourceLoader.getResource(location);
     if (!resource.exists()) {
       throw new IllegalStateException(
-          "시드 파일을 찾을 수 없습니다: " + location + " (data/spot/seed.py 로 먼저 생성하세요)");
+          "시드 파일을 찾을 수 없습니다: " + location + " (py -3 data/spot/build_seed.py 로 먼저 생성하세요)");
     }
     try (InputStream in = resource.getInputStream()) {
       return objectMapper.readValue(in, type);
