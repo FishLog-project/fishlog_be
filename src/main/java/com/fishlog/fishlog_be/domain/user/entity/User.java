@@ -44,4 +44,9 @@ public class User extends BaseTimeEntity {
   public void changePassword(String encodedPassword) {
     this.password = encodedPassword;
   }
+
+  /** 닉네임 변경(마이페이지). 유니크 검증은 서비스 계층에서 선행한다. */
+  public void changeNickname(String nickname) {
+    this.nickname = nickname;
+  }
 }
