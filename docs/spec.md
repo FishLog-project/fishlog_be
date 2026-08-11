@@ -27,8 +27,8 @@
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
 | ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
-| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(Top3+전체, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
-| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(Top3+전체, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
+| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
+| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 
 > 위 경로는 초안입니다. 도메인 확정 시 Request/Response 스키마와 함께 상세화.
 
