@@ -22,7 +22,7 @@
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
-| 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
+| ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **실시간 예보(낚시지수·날씨·물때)** 병합 | 공개 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
@@ -171,6 +171,40 @@
 - 비밀번호 불일치 `400 INVALID_CURRENT_PASSWORD`, 사용자 미존재 `404 USER_NOT_FOUND`.
 - **하드 삭제**: 사용자(`users`) + 그 사용자의 **도감 인증기록(`catch_record`)** 을 함께 삭제하고 refresh(`auth:refresh:{userId}`)를 무효화한다. `catch_record.user_id`는 FK가 아니라(plain Long) DB 캐스케이드가 없어 명시 삭제하며, 남기면 랭킹에 유령 userId로 잡힌다. 되돌릴 수 없다.
 
+### 낚시 스팟 (`/api/spots`) ✅
+
+#### `GET /api/spots/{id}` — 스팟 상세 ✅
+
+DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **실시간 예보**를 병합한다. 예보는 저장하지 않고 바다낚시지수 API를 호출해 Redis에 반나절(12h) 캐시한 뒤 스팟명(`seafsPstnNm`)으로 필터해 서빙한다. → `docs/external.md` §1, "스팟 데이터 설계".
+
+```jsonc
+// Response(data)
+{
+  "spotId": 1,
+  "name": "가거도",
+  "lat": 34.07308,
+  "lot": 125.08805,
+  "prohibit": false,
+  "majorFishes": ["감성돔", "참돔"],
+  "forecast": [
+    {
+      "predcYmd": "20260814", "predcNoonSeCd": "1",
+      "totalIndex": "보통", "lastScr": "60",
+      "tdlvHrScr": "50", "tdlvHrCn": "5물",
+      "minWvhgt": 0.5, "maxWvhgt": 1.0,   // 파고(m)
+      "minWtem": 18.0, "maxWtem": 21.0,   // 수온(℃)
+      "minArtmp": 20.0, "maxArtmp": 26.0, // 기온(℃)
+      "minCrsp": 0.1, "maxCrsp": 0.6,     // 유속
+      "minWspd": 2.0, "maxWspd": 5.0      // 풍속
+    }
+  ]
+}
+```
+
+- **`forecast: null`**: 예보 외부 호출 실패·타임아웃, 또는 매칭 예보 없음(담수 스팟 등). 이 경우에도 기본정보·대상 어종은 정상 `200`으로 응답한다(graceful degradation).
+- **`SPOT_NOT_FOUND(404, S001)`**: 해당 id의 스팟이 없는 경우.
+- 예보 필드 타입/코드값(`predcNoonSeCd`, `tdlvHrCn` 포맷 등)은 실 API 응답 기준으로 확정 예정(현재 방어적 매핑 — 수치는 파싱 실패 시 `null`).
+
 ### 전체 도감 (어종 카탈로그) ✅
 
 > **목록 `GET /api/fish` 는 제거됨.** 전체 어종 그리드는 로그인 도감(`GET /api/collections/dex`)이 `caught` 여부와 함께 내려주므로 별도 공개 목록이 불필요해졌다. 상세만 공개로 남긴다. 목록 조립 로직(`FishService.getFishList`)은 `dex`가 내부에서 재사용하므로 서비스 계층엔 유지된다.
@@ -229,8 +263,8 @@
     ```
   - **플레이스홀더 `-` 제외 ✅:** 대상어종 없음(`-`)은 실어종이 아니므로 `major_fish` 시드에서 제외한다.
 - **대상 어종 없는 스팟 = 빈 값 허용 ✅(확정):** 스팟의 `major_fish` 매핑이 **0건**이어도 무방하며, 상세 응답의 "주요 대상 어종"은 **빈 값(정보 없음)** 으로 처리한다. (확정 데이터셋에서는 전 스팟이 최소 3종을 가지므로 현재 0건인 스팟은 없다. 예전 바다낚시지수 단독 시드에서는 선상 오프셋 지명 스팟 15개가 여기 해당했다.)
-- **호출 효율/캐싱 ✅:** 예보(낚시지수·날씨·물때)는 API가 스팟 단건 필터 없이 `gubun`별 전체(약 1,750건)를 페이지네이션으로 반환 → 상세 요청마다 원본 호출은 지연·쿼터 위험. **Redis 캐시, 반나절 TTL로 확정**(예보 주기가 `predcYmd`+`predcNoonSeCd`로 굵음). 전체 예보를 캐시하고 상세는 `seafsPstnNm`으로 필터해 서빙.
-- **실패 격리 📋 TBD:** 예보 외부 호출이 상세 응답 경로에 있음 → 타임아웃·재시도·폴백(DB 기본정보+대상 어종은 항상 응답, 예보 블록만 `null`+안내) 정책은 **TBD**. → `docs/external.md` 공통 규칙과 함께 확정.
+- **호출 효율/캐싱 ✅ 구현됨:** 예보(낚시지수·날씨·물때)는 API가 스팟 단건 필터 없이 `gubun`별 전체(약 1,750건)를 페이지네이션으로 반환 → 상세 요청마다 원본 호출은 지연·쿼터 위험. **Redis 캐시, 반나절(12h) TTL로 확정·구현**(예보 주기가 `predcYmd`+`predcNoonSeCd`로 굵음). 전체 예보를 스팟명→예보목록 맵으로 **단일 키에 캐시**하고 상세는 `seafsPstnNm`으로 필터해 서빙. 클라이언트/캐시 계층은 `global/forecast`(`FishingIndexClient`·`ForecastService`) → `docs/external.md` §1.
+- **실패 격리 ✅(확정 — graceful degradation):** 예보 외부 호출 실패·타임아웃 시 **DB 기본정보+대상 어종은 항상 `200` 응답**, `forecast`만 `null`. RestClient 타임아웃 3s, 실패는 로그 warn. (재시도·서킷브레이커·캐시 stampede 방지는 후속 📋)
 - **시드 적재 전략(환경별) 🚧:**
   - **로컬 ✅:** `data/spot/build_seed.py` 산출 JSON을 `global/init`의 `SeedDataInitializer`(@PostConstruct)+`SpotSeedLoader`가 적재. `fishlog.seed.enabled=true`일 때만 동작한다. **매 기동마다 실행되며** `spots.name`·`fishes.name`·(spot,fish) 조합 기준 upsert라 재실행해도 중복이 생기지 않는다(idempotent). 이어서 시드에 없는 스팟을 정리하고, `FishContentSeedLoader`가 어종 콘텐츠를 채운 뒤 시드에 없는 어종을 정리한다(아래).
     - 예전에는 `spots.count()>0`이면 통째로 건너뛰는 가드가 있었으나, 시드가 49곳 → 95곳으로 늘어도 **이미 적재된 DB에 새 스팟이 영영 반영되지 않아** 제거했다.
