@@ -4,6 +4,7 @@ import com.fishlog.fishlog_be.domain.fish.entity.Fish;
 import com.fishlog.fishlog_be.domain.fish.repository.FishRepository;
 import com.fishlog.fishlog_be.domain.spot.entity.MajorFish;
 import com.fishlog.fishlog_be.domain.spot.entity.Spot;
+import com.fishlog.fishlog_be.domain.spot.entity.SpotCategory;
 import com.fishlog.fishlog_be.domain.spot.repository.MajorFishRepository;
 import com.fishlog.fishlog_be.domain.spot.repository.SpotRepository;
 import com.fishlog.fishlog_be.global.init.dto.SpotFishSeedData;
@@ -81,14 +82,25 @@ public class SpotSeedLoader {
     Map<String, Spot> spotByName = new HashMap<>();
     int created = 0;
     for (SpotSeed s : data.spots()) {
+      SpotCategory category = SpotCategory.fromLabel(s.category());
       Spot existing = spotRepository.findByName(s.name()).orElse(null);
       if (existing != null) {
+        // 기존 행은 유지(운영값 prohibit 보존)하되, category는 backfill/갱신.
+        if (existing.getCategory() != category) {
+          existing.applyCategory(category);
+        }
         spotByName.put(s.name(), existing);
         continue;
       }
       Spot saved =
           spotRepository.save(
-              Spot.builder().name(s.name()).lat(s.lat()).lot(s.lot()).prohibit(false).build());
+              Spot.builder()
+                  .name(s.name())
+                  .lat(s.lat())
+                  .lot(s.lot())
+                  .prohibit(false)
+                  .category(category)
+                  .build());
       spotByName.put(s.name(), saved);
       created++;
     }

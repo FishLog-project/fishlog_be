@@ -5,6 +5,7 @@ import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
 import com.fishlog.fishlog_be.domain.spot.entity.MajorFish;
 import com.fishlog.fishlog_be.domain.spot.entity.Spot;
+import com.fishlog.fishlog_be.domain.spot.entity.SpotCategory;
 import com.fishlog.fishlog_be.domain.spot.exception.SpotErrorCode;
 import com.fishlog.fishlog_be.domain.spot.repository.MajorFishRepository;
 import com.fishlog.fishlog_be.domain.spot.repository.SpotRepository;
@@ -56,31 +57,10 @@ public class SpotServiceImpl implements SpotService {
             .map(f -> f.getName())
             .toList();
 
-    // 예보성 정보는 저장하지 않고 실시간 병합. 오늘 날짜 + 현재 시각의 오전/오후 1건만 노출.
-    // 실패/미매칭(담수 등)/해당 시간대 예보 없음이면 forecast=null.
-    String today = LocalDate.now(KST).format(YMD);
-    String noon = LocalTime.now(KST).getHour() < 12 ? "오전" : "오후";
-    List<SpotForecast> all = forecastService.getForecast(spot.getName());
+    // 해양 스팟만 실시간 예보를 병합한다(내륙은 예보 대상 아님 → forecast=null).
+    // 예보는 오늘 날짜(KST) + 현재 시각의 오전/오후 1건만 노출한다.
     ForecastResponse forecast =
-        all.stream()
-            .filter(f -> today.equals(f.predcYmd()) && noon.equals(f.predcNoonSeCd()))
-            .findFirst()
-            .map(ForecastResponse::from)
-            .orElse(null);
-
-    // 진단(debug): forecast가 null인 이유 구분. 담수 스팟은 예보 없음이 정상이라 debug 레벨로 둔다.
-    if (forecast == null && log.isDebugEnabled()) {
-      if (all.isEmpty()) {
-        log.debug("[spot-detail] 예보 미수집 spot='{}' (외부 실패/캐시비움 또는 스팟명 미매칭)", spot.getName());
-      } else {
-        log.debug(
-            "[spot-detail] 예보 필터 미매칭 spot='{}' today={} noon={} 사용가능={}",
-            spot.getName(),
-            today,
-            noon,
-            all.stream().map(f -> f.predcYmd() + "/" + f.predcNoonSeCd()).distinct().toList());
-      }
-    }
+        spot.getCategory() == SpotCategory.해양 ? resolveTodayForecast(spot.getName()) : null;
 
     return new SpotDetailResponse(
         spot.getId(),
@@ -88,7 +68,36 @@ public class SpotServiceImpl implements SpotService {
         spot.getLat(),
         spot.getLot(),
         spot.isProhibit(),
+        spot.getCategory(),
         majorFishes,
         forecast);
+  }
+
+  /** 해양 스팟의 오늘·현재 시간대(오전/오후) 예보 1건. 미매칭/외부 실패 시 null(로그로 원인 구분). */
+  private ForecastResponse resolveTodayForecast(String spotName) {
+    String today = LocalDate.now(KST).format(YMD);
+    String noon = LocalTime.now(KST).getHour() < 12 ? "오전" : "오후";
+    List<SpotForecast> all = forecastService.getForecast(spotName);
+    ForecastResponse forecast =
+        all.stream()
+            .filter(f -> today.equals(f.predcYmd()) && noon.equals(f.predcNoonSeCd()))
+            .findFirst()
+            .map(ForecastResponse::from)
+            .orElse(null);
+
+    if (forecast == null) {
+      // 해양 스팟인데 예보가 없으면 데이터/연동 이상 신호이므로 warn.
+      if (all.isEmpty()) {
+        log.warn("[spot-detail] 해양 스팟 예보 미수집 spot='{}' (외부 실패 또는 스팟명↔seafsPstnNm 불일치)", spotName);
+      } else {
+        log.warn(
+            "[spot-detail] 해양 스팟 예보 필터 미매칭 spot='{}' today={} noon={} 사용가능={}",
+            spotName,
+            today,
+            noon,
+            all.stream().map(f -> f.predcYmd() + "/" + f.predcNoonSeCd()).distinct().toList());
+      }
+    }
+    return forecast;
   }
 }

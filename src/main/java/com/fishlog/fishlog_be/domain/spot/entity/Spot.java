@@ -3,6 +3,8 @@ package com.fishlog.fishlog_be.domain.spot.entity;
 import com.fishlog.fishlog_be.global.common.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -45,4 +47,16 @@ public class Spot extends BaseTimeEntity {
   /** 낚시 금지 여부(서비스 운영값, API 아님). 기본 false. */
   @Column(nullable = false)
   private boolean prohibit;
+
+  /**
+   * 스팟 분류(해양/내륙). 시드로 채운다. 기존 행 backfill 대비 nullable 유지(ddl-auto=update가 컬럼을 자동 추가). → docs/spec.md
+   */
+  @Enumerated(EnumType.STRING)
+  @Column
+  private SpotCategory category;
+
+  /** 카테고리 재설정(시드 재적재 시 기존 행 갱신). setter 대신 도메인 메서드. */
+  public void applyCategory(SpotCategory category) {
+    this.category = category;
+  }
 }
