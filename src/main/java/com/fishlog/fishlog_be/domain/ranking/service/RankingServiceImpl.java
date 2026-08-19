@@ -61,8 +61,7 @@ public class RankingServiceImpl implements RankingService {
       me = RankingEntryResponse.completion(null, userId, nicknameOf(userId), 0, 0.0);
     }
 
-    return new RankingResponse(
-        RankingType.COMPLETION, (int) totalFishCount, me, top3(rankings), rankings);
+    return new RankingResponse(RankingType.COMPLETION, (int) totalFishCount, me, rankings);
   }
 
   @Override
@@ -88,7 +87,7 @@ public class RankingServiceImpl implements RankingService {
       me = RankingEntryResponse.size(null, userId, nicknameOf(userId), null);
     }
 
-    return new RankingResponse(RankingType.SIZE, null, me, top3(rankings), rankings);
+    return new RankingResponse(RankingType.SIZE, null, me, rankings);
   }
 
   /** 랭킹에 오른 사용자 id 목록의 닉네임을 한 번에 조회해 map으로 만든다(찾지 못한 id는 없음). */
@@ -132,11 +131,6 @@ public class RankingServiceImpl implements RankingService {
       return null;
     }
     return rankings.stream().filter(e -> userId.equals(e.userId())).findFirst().orElse(null);
-  }
-
-  /** 상위 3명(전체 순위의 앞 3개). */
-  private List<RankingEntryResponse> top3(List<RankingEntryResponse> rankings) {
-    return rankings.stream().limit(3).toList();
   }
 
   /** 완성도 퍼센트(소수 1자리). 분모가 0이면 0%. */

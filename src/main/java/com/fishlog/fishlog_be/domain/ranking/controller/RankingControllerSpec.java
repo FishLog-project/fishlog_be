@@ -22,11 +22,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  *   <li>`metric`: `COMPLETION`(완성도) | `SIZE`(크기)
  *   <li>`totalFishCount`: 완성도 분모(전체 도감 어종 수). <b>크기 랭킹에서는 null</b>
  *   <li>`me`: 본인 순위 블록. <b>로그인(Bearer 토큰) 시에만</b> 채워지고, 비로그인 요청이면 null
- *   <li>`top3`: 상위 3명(= `rankings`의 앞 3개)
  *   <li>`rankings`: 전체 순위(점수 내림차순)
  * </ul>
  *
- * <p><b>인증:</b> 랭킹 목록·Top3는 공개(비로그인 조회 가능)다. `Authorization: Bearer {accessToken}`를 함께 보내면 그 사용자의 내
+ * <p><b>인증:</b> 랭킹 목록은 공개(비로그인 조회 가능)다. `Authorization: Bearer {accessToken}`를 함께 보내면 그 사용자의 내
  * 순위(`me`)가 추가로 채워진다(토큰 선택).
  *
  * <p><b>순위 규칙:</b> 공동 순위를 부여한다(예: 점수 [93.1, 93.1, 86.2] → rank [1, 1, 3]). 로그인했지만 인증 기록이 전혀 없으면
@@ -54,11 +53,11 @@ public interface RankingControllerSpec {
           - 각 순위 항목은 `caughtCount`(인증한 고유 어종 수)와 `completionRate`(소수 1자리 %)를 사용합니다.
 
           ### 사용 방법
-          - `GET /api/rankings/completion` : 전체·Top3만 필요할 때(본인 순위 없음, 비로그인 가능).
+          - `GET /api/rankings/completion` : 전체 순위만 필요할 때(본인 순위 없음, 비로그인 가능).
           - `GET /api/rankings/completion` + 헤더 `Authorization: Bearer {accessToken}` : 본인 순위(`me`)를 함께 받고 싶을 때.
 
           ### 제약조건
-          - 목록·Top3는 공개(인증 불필요)입니다.
+          - 목록은 공개(인증 불필요)입니다.
           - 토큰은 **선택**입니다(내 순위 계산용). 토큰이 없으면 `me`는 null입니다.
 
           ### me(본인 순위) 처리
@@ -94,32 +93,6 @@ public interface RankingControllerSpec {
                                   "completionRate": 69.0,
                                   "maxSize": null
                                 },
-                                "top3": [
-                                  {
-                                    "rank": 1,
-                                    "userId": 7,
-                                    "nickname": "낚시왕",
-                                    "caughtCount": 27,
-                                    "completionRate": 93.1,
-                                    "maxSize": null
-                                  },
-                                  {
-                                    "rank": 1,
-                                    "userId": 4,
-                                    "nickname": "바다사랑",
-                                    "caughtCount": 27,
-                                    "completionRate": 93.1,
-                                    "maxSize": null
-                                  },
-                                  {
-                                    "rank": 3,
-                                    "userId": 1,
-                                    "nickname": "초보강태공",
-                                    "caughtCount": 20,
-                                    "completionRate": 69.0,
-                                    "maxSize": null
-                                  }
-                                ],
                                 "rankings": [
                                   {
                                     "rank": 1,
@@ -180,11 +153,11 @@ public interface RankingControllerSpec {
           - 각 순위 항목은 `maxSize`만 사용하고 `caughtCount`·`completionRate`는 null입니다.
 
           ### 사용 방법
-          - `GET /api/rankings/size` : 전체·Top3만 필요할 때(비로그인 가능).
+          - `GET /api/rankings/size` : 전체 순위만 필요할 때(비로그인 가능).
           - `GET /api/rankings/size` + 헤더 `Authorization: Bearer {accessToken}` : 본인 순위(`me`)를 함께 받고 싶을 때.
 
           ### 제약조건
-          - 목록·Top3는 공개(인증 불필요)입니다.
+          - 목록은 공개(인증 불필요)입니다.
           - 토큰은 **선택**입니다(내 순위 계산용). 토큰이 없으면 `me`는 null입니다.
 
           ### me(본인 순위) 처리
@@ -220,32 +193,6 @@ public interface RankingControllerSpec {
                                   "completionRate": null,
                                   "maxSize": 74.5
                                 },
-                                "top3": [
-                                  {
-                                    "rank": 1,
-                                    "userId": 7,
-                                    "nickname": "낚시왕",
-                                    "caughtCount": null,
-                                    "completionRate": null,
-                                    "maxSize": 88.0
-                                  },
-                                  {
-                                    "rank": 2,
-                                    "userId": 1,
-                                    "nickname": "초보강태공",
-                                    "caughtCount": null,
-                                    "completionRate": null,
-                                    "maxSize": 74.5
-                                  },
-                                  {
-                                    "rank": 3,
-                                    "userId": 4,
-                                    "nickname": "바다사랑",
-                                    "caughtCount": null,
-                                    "completionRate": null,
-                                    "maxSize": 61.0
-                                  }
-                                ],
                                 "rankings": [
                                   {
                                     "rank": 1,

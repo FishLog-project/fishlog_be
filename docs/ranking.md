@@ -15,7 +15,7 @@
 
 1. **본인 순위** — 내 rank(전체에서 몇 위)
 2. **본인 점수** — 완성도 화면: 완성도 %(내가 잡은 어종 수 / 전체 어종 수) · 크기 화면: 내 최대 크기(cm)
-3. **완성도/크기 Top 3** — 상위 3명
+3. **완성도/크기 Top 3** — 상위 3명 (API는 별도 `top3`를 주지 않고, `rankings` 앞 3개로 **클라이언트에서 구성**)
 4. **전체 사용자 순위** — 전체 랭킹 리스트
 
 ---
@@ -35,7 +35,7 @@
 
 ### 사용자 표시 정보(닉네임) ✅ 해결됨
 
-랭킹 **리스트/Top3**는 "누가 몇 위인지"를 사람이 알아볼 수 있게 **닉네임**을 표시해야 한다. `User` 도메인·JWT가 병합되면서 이 요구는 충족됐다.
+랭킹 **리스트**는 "누가 몇 위인지"를 사람이 알아볼 수 있게 **닉네임**을 표시해야 한다. `User` 도메인·JWT가 병합되면서 이 요구는 충족됐다.
 
 - `RankingServiceImpl`이 랭킹에 오른 `userId` 목록을 모아 `UserRepository.findAllById()`로 **한 번에** 닉네임을 조회해 채운다(집계당 쿼리 1회, N+1 없음). 사용자를 찾지 못하면 해당 항목의 `nickname`은 `null`.
 - 기록이 0건인 로그인 사용자의 `me` 블록은 `findById()`로 닉네임만 따로 채운다.
@@ -50,12 +50,12 @@
 
 | 상태 | Method | Path | 설명 | 인증 |
 |---|---|---|---|---|
-| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(내 순위 + Top3 + 전체) | 목록 공개 / `me`는 로그인 시 |
-| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(내 순위 + Top3 + 전체) | 목록 공개 / `me`는 로그인 시 |
+| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(내 순위 + 전체) | 목록 공개 / `me`는 로그인 시 |
+| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(내 순위 + 전체) | 목록 공개 / `me`는 로그인 시 |
 
 **설계 결정**
 - **경로 분리 vs 쿼리 파라미터:** `/completion`·`/size`로 **경로 분리**한다(쿼리 `?type=` 대안보다 캐시·문서화·권한 확장에 유리). 두 핸들러는 같은 응답 DTO를 공유하되 `metric` 필드로 어떤 기준인지 표기.
-- **본인 순위(`me`) 신원:** ✅ **로그인 사용자(`@AuthenticationPrincipal Long userId`)** 기준으로 계산한다. 랭킹 목록·Top3는 공개(`permitAll`)라 비로그인도 조회 가능하지만, `Authorization: Bearer` 토큰을 함께 보내면 그 사용자의 `me`가 추가로 채워진다(토큰 없으면 `me=null`). 과거의 임시 `userId` 쿼리 파라미터는 제거됨.
+- **본인 순위(`me`) 신원:** ✅ **로그인 사용자(`@AuthenticationPrincipal Long userId`)** 기준으로 계산한다. 랭킹 목록은 공개(`permitAll`)라 비로그인도 조회 가능하지만, `Authorization: Bearer` 토큰을 함께 보내면 그 사용자의 `me`가 추가로 채워진다(토큰 없으면 `me=null`). 과거의 임시 `userId` 쿼리 파라미터는 제거됨.
 - **본인 기록이 없을 때:** 한 번도 인증 안 한 사용자는 랭킹 목록에 없다. 이때 `me.rank`는 `null`, 점수는 0(완성도 0% / maxSize `null`)로 응답한다(404 아님 — "아직 순위 없음"은 정상 상태).
 - **페이징 📋 TBD:** 초기엔 전체 반환. 사용자가 늘면 `page`/`size` 도입 및 `me`는 별도 계산(자기 순위는 페이지 밖에 있을 수 있으므로 항상 함께 반환).
 
@@ -88,11 +88,6 @@
       "caughtCount": 12,
       "completionRate": 41.4
     },
-    "top3": [
-      { "rank": 1, "userId": 7, "nickname": "낚시왕", "caughtCount": 27, "completionRate": 93.1 },
-      { "rank": 2, "userId": 3, "nickname": "월척각", "caughtCount": 25, "completionRate": 86.2 },
-      { "rank": 3, "userId": 9, "nickname": "바다사랑", "caughtCount": 20, "completionRate": 69.0 }
-    ],
     "rankings": [
       { "rank": 1, "userId": 7, "nickname": "낚시왕", "caughtCount": 27, "completionRate": 93.1 },
       { "rank": 2, "userId": 3, "nickname": "월척각", "caughtCount": 25, "completionRate": 86.2 }
@@ -110,8 +105,7 @@
 | `me.caughtCount` | int | 내가 인증한 **고유** 수집대상 어종 수 |
 | `me.completionRate` | double | `caughtCount / totalFishCount × 100` (소수 1자리) |
 | `*.nickname` | String\|null | `users`에서 조회한 닉네임. 사용자를 찾지 못하면 `null` |
-| `top3` | array | 상위 3명(`rankings`의 앞 3개와 동일 데이터) |
-| `rankings` | array | 전체 순위 리스트(내림차순) |
+| `rankings` | array | 전체 순위 리스트(내림차순). 화면의 Top3는 이 배열 앞 3개로 클라이언트에서 구성 |
 
 ### `GET /api/rankings/size` — 크기 랭킹
 
@@ -132,11 +126,6 @@
       "nickname": "붕어킬러",
       "maxSize": 42.5
     },
-    "top3": [
-      { "rank": 1, "userId": 4, "nickname": "감성돔장인", "maxSize": 88.0 },
-      { "rank": 2, "userId": 7, "nickname": "낚시왕", "maxSize": 71.3 },
-      { "rank": 3, "userId": 2, "nickname": "새벽출조", "maxSize": 65.0 }
-    ],
     "rankings": [
       { "rank": 1, "userId": 4, "nickname": "감성돔장인", "maxSize": 88.0 }
     ]
@@ -151,7 +140,7 @@
 | `rankings[].maxSize` | double | 해당 사용자의 최대 크기 |
 | `*.nickname` | String\|null | `users`에서 조회한 닉네임. 사용자를 찾지 못하면 `null` |
 
-> 완성도 응답엔 `totalFishCount`가 있고 크기 응답엔 없다(분모 개념이 없으므로). 그 외 `metric`/`me`/`top3`/`rankings` 뼈대는 공유한다.
+> 완성도 응답엔 `totalFishCount`가 있고 크기 응답엔 없다(분모 개념이 없으므로). 그 외 `metric`/`me`/`rankings` 뼈대는 공유한다.
 
 ---
 
@@ -193,7 +182,8 @@ ORDER BY maxSize DESC;
 | 3 | **랭킹 표시 범위** | 초기엔 **전체 반환**. 사용자 증가 시 페이징 도입 재검토(아래 "엔드포인트 설계" 참고). | 📋 TBD(현재 전체) |
 | 4 | **본인 기록 0건** | 랭킹 목록엔 없으므로 `me.rank=null` + 완성도 `0.0` / `maxSize=null`. 404가 아니라 200. | ✅ 구현됨 |
 | 5 | **크기 랭킹 기록 0건 사용자** | 랭킹 목록에서 제외(인증 기록이 있어야 순위에 오른다). | ✅ 구현됨 |
-| 6 | **비로그인 요청** | 목록·Top3는 그대로 반환하고 `me=null`. (`GET /api/rankings/**`는 `permitAll`) | ✅ 구현됨 |
+| 6 | **비로그인 요청** | 목록은 그대로 반환하고 `me=null`. (`GET /api/rankings/**`는 `permitAll`) | ✅ 구현됨 |
+| 7 | **top3 필드 제거** | 응답에서 `top3`를 제거했다. 화면의 Top3는 `rankings` 앞 3개로 클라이언트가 구성(완성도·크기 공용 DTO에서 함께 제거). | ✅ 구현됨 |
 
 ### 공동 순위(1,1,3) 계산 규칙 ✅
 
