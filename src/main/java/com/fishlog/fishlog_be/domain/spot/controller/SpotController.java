@@ -1,11 +1,13 @@
 package com.fishlog.fishlog_be.domain.spot.controller;
 
+import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
 import com.fishlog.fishlog_be.domain.spot.service.SpotService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,5 +23,11 @@ public class SpotController implements SpotControllerSpec {
   @GetMapping
   public BaseResponse<List<SpotResponse>> getSpots() {
     return BaseResponse.success(spotService.getSpots());
+  }
+
+  @Override
+  @GetMapping("/{spotId}")
+  public BaseResponse<SpotDetailResponse> getSpotDetail(@PathVariable Long spotId) {
+    return BaseResponse.success(spotService.getSpotDetail(spotId));
   }
 }

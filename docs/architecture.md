@@ -20,9 +20,10 @@ com.fishlog.fishlog_be
 │  │  ├─ dto/MyProfileResponse · NicknameUpdateRequest · PasswordUpdateRequest · WithdrawRequest
 │  │  ├─ exception/UserErrorCode.java          # U001~U004
 │  │  ├─ entity/User.java  repository/UserRepository.java
-│  ├─ spot                       # 스팟 목록 + MajorFish
-│  │  ├─ controller/SpotController.java (+Spec)  service/SpotService (+Impl)  dto/SpotResponse.java
-│  │  ├─ entity/Spot.java  entity/MajorFish.java
+│  ├─ spot                       # 스팟 목록/상세 + MajorFish
+│  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/{id}(상세=DB+대상어종+실시간 예보)
+│  │  ├─ service/SpotService (+Impl)  dto/SpotResponse · SpotDetailResponse · ForecastResponse
+│  │  ├─ entity/Spot.java  entity/MajorFish.java  exception/SpotErrorCode.java  # S001 SPOT_NOT_FOUND
 │  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java
 │  ├─ fish                       # 어종 전체 도감(마스터 카탈로그)
 │  │  ├─ controller/FishController.java     # GET /api/fish/{id} (상세만 공개; 목록은 제거, dex가 대체)
@@ -44,9 +45,10 @@ com.fishlog.fishlog_be
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
-   ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), SwaggerConfig(JWT 스킴)
+   ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), SwaggerConfig(JWT 스킴)
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
+   ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
    ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, SeedDataReader (+dto) — 스팟/어종 시드 적재
    └─ exception
       ├─ model/BaseErrorCode.java             # 에러 코드 인터페이스 (code/message/status)
@@ -213,9 +215,10 @@ public class SpotController implements SpotControllerSpec {
 | `common` | 공통 상위 엔티티 등(`BaseTimeEntity`) | ✅ |
 | `response` | 공통 응답 래퍼(`BaseResponse`) | ✅ |
 | `exception` (+`model`) | 전역 예외 처리·공통 에러 코드(`GlobalExceptionHandler`, `GlobalErrorCode`, `model/BaseErrorCode`) | ✅ |
-| `config` | Spring `@Configuration` 모음 — `AsyncConfig`(@Async)·`CorsConfig`·`PasswordConfig`(BCrypt)·`RedisConfig`(캐시·인증코드 저장)·`SwaggerConfig`(OpenAPI + Bearer JWT 스킴) | ✅ |
+| `config` | Spring `@Configuration` 모음 — `AsyncConfig`(@Async)·`CorsConfig`·`PasswordConfig`(BCrypt)·`RedisConfig`(캐시·인증코드 저장)·`RestClientConfig`(외부 HTTP 타임아웃)·`SwaggerConfig`(OpenAPI + Bearer JWT 스킴) | ✅ |
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
+| `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (docs/media.md) | 📋 |
 | `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
