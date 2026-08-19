@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.domain.spot.dto;
 
+import com.fishlog.fishlog_be.domain.spot.entity.SpotCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
@@ -16,5 +17,6 @@ public record SpotDetailResponse(
     @Schema(description = "위도", example = "34.07308") double lat,
     @Schema(description = "경도", example = "125.08805") double lot,
     @Schema(description = "낚시 금지 여부", example = "false") boolean prohibit,
+    @Schema(description = "분류(해양/내륙)", example = "해양") SpotCategory category,
     @Schema(description = "주요 대상 어종명 목록", example = "[\"감성돔\", \"참돔\"]") List<String> majorFishes,
-    @Schema(description = "오늘·현재 시간대(오전/오후) 예보 1건. 미제공 시 null") ForecastResponse forecast) {}
+    @Schema(description = "오늘·현재 시간대(오전/오후) 예보 1건. 내륙 스팟·미제공 시 null") ForecastResponse forecast) {}

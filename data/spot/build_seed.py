@@ -117,13 +117,13 @@ def main() -> None:
 
     kept, merged, split = resolve_duplicate_names(raw_spots)
 
-    # spots_seed.json — 엔티티 필드(name/lat/lot)만. category·region·type 은
-    # Spot 엔티티에 컬럼이 없어 적재하지 않는다(명세는 docs/spec.md 참고).
+    # spots_seed.json — 엔티티 필드(name/lat/lot/category). category("바다"/"담수")는
+    # Spot.category(해양/내륙)로 적재된다. region·type 은 아직 컬럼이 없어 제외(명세는 docs/spec.md).
     spots_payload = {
         "source": SOURCE_NOTE,
         "spotCount": len(kept),
         "spots": [
-            {"name": s["name"], "lat": s["lat"], "lot": s["lng"]}
+            {"name": s["name"], "lat": s["lat"], "lot": s["lng"], "category": s["category"]}
             for s in sorted(kept, key=lambda s: s["name"])
         ],
     }

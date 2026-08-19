@@ -21,7 +21,7 @@
 | ✅ | PATCH | `/api/users/me/nickname` | 닉네임 변경(마이페이지) | 보호 |
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
-| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
+| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`(해양/내륙)) | 공개 |
 | ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **실시간 예보(낚시지수·날씨·물때)** 병합 | 공개 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
@@ -187,6 +187,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **실�
   "lat": 34.07308,
   "lot": 125.08805,
   "prohibit": false,
+  "category": "해양",
   "majorFishes": ["감성돔", "참돔"],
   "forecast": {
     "predcYmd": "2026-08-19", "predcNoonSeCd": "오전",
@@ -202,7 +203,8 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **실�
 }
 ```
 
-- **`forecast: null`**: 예보 외부 호출 실패·타임아웃, 매칭 예보 없음(담수 스팟 등), 또는 **오늘·현재 시간대 예보 없음**. 이 경우에도 기본정보·대상 어종은 정상 `200`으로 응답한다(graceful degradation).
+- **`category`**: `해양`/`내륙`. **내륙 스팟은 예보 대상이 아니라 `forecast`가 항상 `null`**(예보 API를 아예 호출하지 않음).
+- **`forecast: null`**: (해양) 예보 외부 호출 실패·타임아웃, 매칭 예보 없음, **오늘·현재 시간대 예보 없음**, 또는 **내륙 스팟**. 이 경우에도 기본정보·대상 어종은 정상 `200`으로 응답한다(graceful degradation).
 - **`SPOT_NOT_FOUND(404, S001)`**: 해당 id의 스팟이 없는 경우.
 - 예보 수치 필드는 파싱 실패 시 개별 `null`(방어적 매핑). `predcNoonSeCd`는 `오전`/`오후` 문자열, `predcYmd`는 `yyyy-MM-dd`.
 - `lastScr`·`tdlvHrScr`(점수)는 문서 스키마엔 정수로 있으나 **값이 없는 레코드는 API가 키를 생략**하므로 `null`로 나올 수 있다.
@@ -244,7 +246,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **실�
 | **정적 매핑** | 스팟에서 잡히는 대상 어종(`seafsTgfshNm`) | DB에 시드 저장(`major_fish`, `fishes` 연동). 배치로 스팟별 어종 수집·고유화 |
 | **예보성(가변)** | 낚시지수(`totalIndex`·`lastScr`)·날씨(파고·수온·기온·유속·풍속)·물때(`tdlvHrScr`·`tdlvHrCn`) | **저장하지 않음.** 스팟 **상세 조회 시점**에 외부 API를 호출·파싱해 응답에 병합 |
 
-**흐름:** `GET /api/spots/{id}` → ① DB에서 스팟 기본정보 + 대상 어종(`major_fish`) 조회 → ② 외부 API 예보(Redis 캐시)에서 해당 스팟의 낚시지수·날씨·물때 파싱 → ③ 병합 응답.
+**흐름:** `GET /api/spots/{id}` → ① DB에서 스팟 기본정보 + 대상 어종(`major_fish`) 조회 → ② **해양 스팟이면** 외부 API 예보(Redis 캐시)에서 낚시지수·날씨·물때 파싱(내륙이면 생략) → ③ 병합 응답. 해양/내륙은 `spots.category`로 분기한다.
 
 **설계 결정 사항**
 - **대상 어종 = 정적 매핑 단일화 ✅(확정):** 대상 어종(`seafsTgfshNm`)은 **오전/오후·날짜에 무관하게 고정**임을 실측으로 확인(7일치 294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건, 스팟별 어종 집합 불변). 따라서 예보가 아니라 **스팟의 정적 속성**으로 취급하여 **`major_fish`에 저장하는 한 갈래로만** 처리한다. (실시간 파싱으로 어종을 뽑는 방식은 폐기.)
@@ -328,15 +330,15 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
   - ⚠️ **이름 변경 → 고아 스팟:** upsert는 새 이름을 만들 뿐 옛 행을 지우지 않는다. 그래서 `SpotSeedLoader`에 **정리(prune) 단계**를 두어 시드에 없는 스팟을 `major_fish` 매핑과 함께 삭제한다. `spots`를 참조하는 건 `major_fish`뿐이라(사용자 데이터 없음) 어종 정리와 달리 보류 조건이 없다.
   - `build_seed.py`가 병합·분리 결과를 실행 로그에 출력한다.
 
-- **`category`·`region`·`type`은 DB 미저장 📋(명세만):** 원본은 아래 3개 필드를 갖지만 **`Spot` 엔티티에 컬럼이 없어 적재하지 않는다.** 원본 JSON에는 보존되어 있으므로, 컬럼을 추가하는 시점에 `build_seed.py`가 `spots_seed.json`에 함께 내보내고 `SpotSeed` 레코드·`SpotSeedLoader`만 확장하면 된다.
+- **`category`는 DB 저장 ✅ / `region`·`type`은 아직 미저장 📋:** 원본은 아래 3개 필드를 갖는다. `category`는 `spots.category`(`SpotCategory` enum 해양/내륙)로 적재됨(`build_seed.py`가 `spots_seed.json`에 내보내고 `SpotSeed`·`SpotSeedLoader`가 매핑). `region`·`type`은 아직 컬럼이 없어 원본 JSON에만 보존 — 필요 시 같은 방식으로 확장한다.
 
-  | 필드 | 값 | 용도(예정) |
-  |---|---|---|
-  | `category` | `담수` / `바다` | 스팟 목록·지도 필터, 담수/바다 도감 분기 |
-  | `region` | `강원도`·`경기도`·`동해`·`남해`·`서해`·`제주` 등 (원본 50곳은 `null`) | 지역별 조회. **null 허용 필수** — 담수 29곳이 미기재 |
-  | `type` | `강/하천`·`저수지`·`농수로`·`바다` | 스팟 유형 배지·필터 |
+  | 필드 | 값 | 저장 | 용도 |
+  |---|---|---|---|
+  | `category` | `바다`→해양 / `담수`→내륙 | ✅ `spots.category` | 스팟 목록·지도 필터, 담수/바다 도감 분기, 상세 예보 분기 |
+  | `region` | `강원도`·`경기도`·`동해`·`남해`·`서해`·`제주` 등 (원본 50곳은 `null`) | 📋 미저장 | 지역별 조회. **null 허용 필수** — 담수 29곳이 미기재 |
+  | `type` | `강/하천`·`저수지`·`농수로`·`바다` | 📋 미저장 | 스팟 유형 배지·필터 |
 
-  - 도입 시 `category`·`type`은 값 집합이 닫혀 있어 **enum**(`SpotCategory`, `SpotType`)이 적합하고, `region`은 표기가 행정구역(`강원도`)과 해역(`동해`)으로 섞여 있어 **정규화 후** 컬럼화할 것.
+  - `category`는 값 집합이 닫혀 있어 **enum `SpotCategory`(해양/내륙)** 로 도입 완료. `type`도 도입 시 enum(`SpotType`)이 적합하고, `region`은 표기가 행정구역(`강원도`)과 해역(`동해`)으로 섞여 있어 **정규화 후** 컬럼화할 것.
 
 ## 어종 도감 콘텐츠 시드 ✅
 
@@ -445,7 +447,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
-| `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit` |
+| `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit`, `category`(ENUM 해양/내륙) |
 
 ### users (사용자) — 엔티티 ✅ / 가입 흐름 📋
 자체 이메일/비밀번호 로그인 주체. 회원가입은 **이메일/비밀번호/닉네임만** 받는다. 엔티티(`User`)·`UserRepository`·가입/로그인 엔드포인트 모두 구현됨. 인증 흐름·정책은 `docs/security.md`. (엔티티 필드: `password_hash` 컬럼은 자바 필드명 `password`로 매핑.)
@@ -471,10 +473,12 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `lat` | DOUBLE | NOT NULL | 위도 | API `lat` |
 | `lot` | DOUBLE | NOT NULL | 경도 | API `lot` |
 | `prohibit` | BOOLEAN | NOT NULL | 낚시 금지 여부(기본 false) | 서비스 운영값(API 아님) |
+| `category` | ENUM(STRING) | nullable | 분류 **해양/내륙** | 시드 `category`(바다→해양·담수→내륙) |
 
-- 현재 **49행**(고유 위치명, 추후 추가 가능). `name`에 **UNIQUE 확정**(엔티티 `@Column(unique = true)`) — 시드 upsert 기준 키로 사용.
+- 현재 **98행**(확정 데이터셋: 해양 49/내륙 49). `name`에 **UNIQUE 확정**(엔티티 `@Column(unique = true)`) — 시드 upsert 기준 키로 사용.
 - 좌표는 ERD v0.1의 FLOAT 대신 **`double`로 매핑**(위경도 소수 5자리 정밀도 보존).
-- 예보성 필드(낚시지수·날씨·물때·대상 어종)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
+- `category`(`SpotCategory` enum 해양/내륙)는 `@Enumerated(STRING)`로 저장(값 "해양"/"내륙"). `ddl-auto=update`가 컬럼을 자동 추가하고, 기존 행은 재기동 시 시드가 backfill하므로 nullable. **상세 조회에서 해양=예보 병합 / 내륙=예보 없음(forecast null)** 분기 기준.
+- 예보성 필드(낚시지수·날씨·물때)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
 
 ```
 User(users) 1 ──< catch_record >── 1 Fish(fishes)   # 사용자 도감(어종 인증 1건=1행)

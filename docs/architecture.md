@@ -23,7 +23,7 @@ com.fishlog.fishlog_be
 │  ├─ spot                       # 스팟 목록/상세 + MajorFish
 │  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/{id}(상세=DB+대상어종+실시간 예보)
 │  │  ├─ service/SpotService (+Impl)  dto/SpotResponse · SpotDetailResponse · ForecastResponse
-│  │  ├─ entity/Spot.java  entity/MajorFish.java  exception/SpotErrorCode.java  # S001 SPOT_NOT_FOUND
+│  │  ├─ entity/Spot.java · SpotCategory.java(해양/내륙) · MajorFish.java  exception/SpotErrorCode.java  # S001 SPOT_NOT_FOUND
 │  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java
 │  ├─ fish                       # 어종 전체 도감(마스터 카탈로그)
 │  │  ├─ controller/FishController.java     # GET /api/fish/{id} (상세만 공개; 목록은 제거, dex가 대체)
