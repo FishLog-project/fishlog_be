@@ -44,7 +44,7 @@ public interface SpotControllerSpec {
                               "code": 200,
                               "message": "요청이 성공적으로 처리되었습니다.",
                               "data": [
-                                { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805 }
+                                { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805, "category": "해양" }
                               ]
                             }
                             """)))
@@ -91,6 +91,7 @@ public interface SpotControllerSpec {
                                 "lat": 34.07308,
                                 "lot": 125.08805,
                                 "prohibit": false,
+                                "category": "해양",
                                 "majorFishes": ["감성돔", "참돔"],
                                 "forecast": {
                                   "predcYmd": "2026-08-19",
