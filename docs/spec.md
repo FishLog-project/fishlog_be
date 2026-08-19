@@ -177,6 +177,8 @@
 
 DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **실시간 예보**를 병합한다. 예보는 저장하지 않고 바다낚시지수 API를 호출해 Redis에 반나절(12h) 캐시한 뒤 스팟명(`seafsPstnNm`)으로 필터해 서빙한다. → `docs/external.md` §1, "스팟 데이터 설계".
 
+`forecast`는 **오늘 날짜(KST) + 현재 시각의 오전/오후 1건**(단일 객체). 서버가 `predcYmd == 오늘` 且 `predcNoonSeCd == 오전|오후`(현재 시각 0~11시=오전, 12시~=오후)로 필터한다.
+
 ```jsonc
 // Response(data)
 {
@@ -186,24 +188,24 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **실�
   "lot": 125.08805,
   "prohibit": false,
   "majorFishes": ["감성돔", "참돔"],
-  "forecast": [
-    {
-      "predcYmd": "20260814", "predcNoonSeCd": "1",
-      "totalIndex": "보통", "lastScr": "60",
-      "tdlvHrScr": "50", "tdlvHrCn": "5물",
-      "minWvhgt": 0.5, "maxWvhgt": 1.0,   // 파고(m)
-      "minWtem": 18.0, "maxWtem": 21.0,   // 수온(℃)
-      "minArtmp": 20.0, "maxArtmp": 26.0, // 기온(℃)
-      "minCrsp": 0.1, "maxCrsp": 0.6,     // 유속
-      "minWspd": 2.0, "maxWspd": 5.0      // 풍속
-    }
-  ]
+  "forecast": {
+    "predcYmd": "2026-08-19", "predcNoonSeCd": "오전",
+    "totalIndex": "보통",               // 낚시지수(라벨)
+    "lastScr": 60, "tdlvHrScr": 50,     // 낚시지수 점수·물때 점수(값 없으면 null)
+    "tdlvHrCn": "중조기",               // 물때 내용
+    "minWvhgt": 0.4, "maxWvhgt": 0.4,   // 파고(m)
+    "minWtem": 27.7, "maxWtem": 27.8,   // 수온(℃)
+    "minArtmp": 28.3, "maxArtmp": 28.5, // 기온(℃)
+    "minCrsp": 0.2, "maxCrsp": 0.8,     // 유속
+    "minWspd": 4.2, "maxWspd": 4.8      // 풍속
+  }
 }
 ```
 
-- **`forecast: null`**: 예보 외부 호출 실패·타임아웃, 또는 매칭 예보 없음(담수 스팟 등). 이 경우에도 기본정보·대상 어종은 정상 `200`으로 응답한다(graceful degradation).
+- **`forecast: null`**: 예보 외부 호출 실패·타임아웃, 매칭 예보 없음(담수 스팟 등), 또는 **오늘·현재 시간대 예보 없음**. 이 경우에도 기본정보·대상 어종은 정상 `200`으로 응답한다(graceful degradation).
 - **`SPOT_NOT_FOUND(404, S001)`**: 해당 id의 스팟이 없는 경우.
-- 예보 필드 타입/코드값(`predcNoonSeCd`, `tdlvHrCn` 포맷 등)은 실 API 응답 기준으로 확정 예정(현재 방어적 매핑 — 수치는 파싱 실패 시 `null`).
+- 예보 수치 필드는 파싱 실패 시 개별 `null`(방어적 매핑). `predcNoonSeCd`는 `오전`/`오후` 문자열, `predcYmd`는 `yyyy-MM-dd`.
+- `lastScr`·`tdlvHrScr`(점수)는 문서 스키마엔 정수로 있으나 **값이 없는 레코드는 API가 키를 생략**하므로 `null`로 나올 수 있다.
 
 ### 전체 도감 (어종 카탈로그) ✅
 
@@ -240,7 +242,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **실�
 |---|---|---|
 | **불변** | 위치명·위도·경도(그리고 서비스 운영값 `prohibit`) | DB에 시드 저장(`spots`). 목록/지도 마커·주변 검색에 사용 |
 | **정적 매핑** | 스팟에서 잡히는 대상 어종(`seafsTgfshNm`) | DB에 시드 저장(`major_fish`, `fishes` 연동). 배치로 스팟별 어종 수집·고유화 |
-| **예보성(가변)** | 낚시지수(`totalIndex`/`lastScr`)·날씨(파고·수온·기온·유속·풍속)·물때(`tdlvHrScr`/`tdlvHrCn`) | **저장하지 않음.** 스팟 **상세 조회 시점**에 외부 API를 호출·파싱해 응답에 병합 |
+| **예보성(가변)** | 낚시지수(`totalIndex`·`lastScr`)·날씨(파고·수온·기온·유속·풍속)·물때(`tdlvHrScr`·`tdlvHrCn`) | **저장하지 않음.** 스팟 **상세 조회 시점**에 외부 API를 호출·파싱해 응답에 병합 |
 
 **흐름:** `GET /api/spots/{id}` → ① DB에서 스팟 기본정보 + 대상 어종(`major_fish`) 조회 → ② 외부 API 예보(Redis 캐시)에서 해당 스팟의 낚시지수·날씨·물때 파싱 → ③ 병합 응답.
 
