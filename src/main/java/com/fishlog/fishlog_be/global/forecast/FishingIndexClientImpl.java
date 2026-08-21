@@ -126,8 +126,6 @@ public class FishingIndexClientImpl implements FishingIndexClient {
         text(n, "predcYmd"),
         text(n, "predcNoonSeCd"),
         text(n, "totalIndex"),
-        integer(n, "lastScr"),
-        integer(n, "tdlvHrScr"),
         text(n, "tdlvHrCn"),
         number(n, "minWvhgt"),
         number(n, "maxWvhgt"),
@@ -161,12 +159,6 @@ public class FishingIndexClientImpl implements FishingIndexClient {
     } catch (NumberFormatException e) {
       return null;
     }
-  }
-
-  /** 정수 점수 필드를 관대하게 파싱한다(빈 값·비수치는 null, 소수면 반올림). */
-  private Integer integer(JsonNode n, String field) {
-    Double d = number(n, field);
-    return d == null ? null : (int) Math.round(d);
   }
 
   /** Decoding 키(+,/,= 포함)는 percent-encoding, 이미 인코딩된 Encoding 키(% 포함)는 그대로. */

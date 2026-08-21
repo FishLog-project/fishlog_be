@@ -11,8 +11,6 @@ public record SpotForecast(
     String predcYmd, // 예보 일자(YYYYMMDD)
     String predcNoonSeCd, // 오전/오후 구분
     String totalIndex, // 낚시지수(라벨)
-    Integer lastScr, // 낚시지수 점수(값 없으면 응답에서 생략 → null)
-    Integer tdlvHrScr, // 물때 점수(값 없으면 응답에서 생략 → null)
     String tdlvHrCn, // 물때 내용
     Double minWvhgt, // 최소 파고(m)
     Double maxWvhgt, // 최대 파고(m)
