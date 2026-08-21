@@ -27,12 +27,12 @@
   | `lat` | number | 위도 | ✅ `lat` |
   | `lot` | number | 경도(longitude) | ✅ `lot` |
   | `seafsTgfshNm` | string | 대상 어종명 | ✅ `major_fish`(정적 매핑, 스팟별 어종) |
-  | `totalIndex`(라벨) / `lastScr`(점수) | string/int | 낚시지수 | ✖ 예보성 |
+  | `totalIndex` | string | 낚시지수(라벨) | ✖ 예보성 |
   | `predcYmd` / `predcNoonSeCd` | string | 예보 일자(`yyyy-MM-dd`)·오전/오후 구분(`오전`/`오후`, 먼 날은 `일`) | ✖ 예보성 |
-  | `tdlvHrScr`(점수) / `tdlvHrCn`(내용, 예: "중조기") | int/string | 물때 | ✖ 예보성 |
+  | `tdlvHrCn` | string | 물때(내용, 예: "중조기") | ✖ 예보성 |
   | `minWvhgt`/`maxWvhgt`/`minWtem`/`maxWtem`/`minArtmp`/`maxArtmp`/`minCrsp`/`maxCrsp`/`minWspd`/`maxWspd` | number | 파고·수온·기온·유속·풍속 | ✖ 예보성 |
 
-  > ⚠️ 실제 v2 응답 확인(2026-08): `predcYmd`는 하이픈 포함 `yyyy-MM-dd`, `predcNoonSeCd`는 `오전`/`오후`(먼 날은 `일`). **`lastScr`·`tdlvHrScr`(점수)는 문서 스키마엔 정수로 있으나 값이 없는 레코드는 응답에서 키가 생략**되므로 파싱 시 `null` 처리한다(매핑 유지).
+  > ⚠️ 실제 v2 응답 확인(2026-08): `predcYmd`는 하이픈 포함 `yyyy-MM-dd`, `predcNoonSeCd`는 `오전`/`오후`(먼 날은 `일`). **낚시지수 점수(`lastScr`)·물때 점수(`tdlvHrScr`)는 문서 스키마엔 정수로 있으나 v2 실응답에서 값을 주지 않아(키 생략) 항상 null → 응답 매핑에서 제외**한다(낚시지수는 라벨 `totalIndex`, 물때는 `tdlvHrCn`만 제공).
 
 - **수집 규모:** 전체 약 1,750건 × 2구분 = 3,500 레코드 → **고유 위치명(`seafsPstnNm`) 49개**. 이 49개가 곧 스팟 종류 수(추후 추가 가능). 대상 어종은 **7종**(감성돔·농어·돌돔·벵에돔·우럭·참돔 + `기타어종`), (스팟,어종) 페어 **160개**.
 - **대상 어종은 시점 불변(실측):** 7일치 전량 비교 결과 `seafsTgfshNm`은 **오전/오후·날짜에 무관하게 스팟별 고정**(294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건). 따라서 예보가 아니라 **정적 매핑(`major_fish`)으로 저장**한다 → `docs/spec.md`.

@@ -97,8 +97,6 @@ public interface SpotControllerSpec {
                                   "predcYmd": "2026-08-19",
                                   "predcNoonSeCd": "오전",
                                   "totalIndex": "보통",
-                                  "lastScr": 60,
-                                  "tdlvHrScr": 50,
                                   "tdlvHrCn": "중조기",
                                   "minWvhgt": 0.5, "maxWvhgt": 1.0,
                                   "minWtem": 18.0, "maxWtem": 21.0,
