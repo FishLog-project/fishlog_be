@@ -11,6 +11,7 @@ import com.fishlog.fishlog_be.global.init.dto.SpotFishSeedData;
 import com.fishlog.fishlog_be.global.init.dto.SpotSeed;
 import com.fishlog.fishlog_be.global.init.dto.SpotSeedData;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>{@code fishes} : name UNIQUE 기준으로 없으면 생성.
  *   <li>{@code major_fish} : (spot, fish) 조합이 없을 때만 생성.
  *   <li>정리 : 시드에 없는 스팟은 매핑과 함께 삭제(이름 변경 시 고아 행이 남지 않도록).
+ *   <li>정리 : 시드에 없는 {@code major_fish} 매핑도 삭제(매핑이 줄어드는 변경을 반영하기 위해).
  * </ul>
  *
  * 재실행해도 중복이 생기지 않는다.
@@ -52,6 +54,37 @@ public class SpotSeedLoader {
     Map<String, Spot> spotByName = upsertSpots();
     upsertMajorFishes(spotByName);
     pruneSpots(spotByName.keySet());
+  }
+
+  /**
+   * 시드에 없는 (스팟, 어종) 매핑을 삭제한다. 시드가 단일 진실 공급원이므로 {@code major_fish}도 시드와 정확히 일치시킨다.
+   *
+   * <p>upsert 만으로는 <b>매핑이 줄어드는 변경이 반영되지 않는다.</b> 실제로 바다 스팟 어종 수 상한(스팟당 6종)을 도입해 페어가 717 → 593개로 줄었을
+   * 때, 이 단계가 없으면 이미 적재된 DB는 예전 매핑을 그대로 유지해 변경이 무효가 된다.
+   *
+   * <p>{@code major_fish}를 참조하는 테이블은 없다(사용자 인증기록 {@code catch_record}는 {@code fishes}를 참조하므로 영향
+   * 없음). 따라서 어종 정리와 달리 보류 조건이 없다.
+   *
+   * @param seedPairKeys 시드가 요구하는 매핑의 {@code "spotId:fishId"} 키 집합
+   */
+  private void pruneMajorFishes(Set<String> seedPairKeys) {
+    int deleted = 0;
+    for (MajorFish mapping : majorFishRepository.findAll()) {
+      // LAZY 프록시라도 식별자는 쿼리 없이 읽힌다. 이름으로 비교하면 매핑마다 N+1 이 터진다.
+      String key = pairKey(mapping.getSpot().getId(), mapping.getFish().getId());
+      if (seedPairKeys.contains(key)) {
+        continue;
+      }
+      majorFishRepository.delete(mapping);
+      deleted++;
+    }
+    if (deleted > 0) {
+      log.info("[seed] major_fish 정리: 시드에서 빠진 매핑 {}개 삭제", deleted);
+    }
+  }
+
+  private String pairKey(Long spotId, Long fishId) {
+    return spotId + ":" + fishId;
   }
 
   /**
@@ -123,9 +156,10 @@ public class SpotSeedLoader {
       fishByName.put(name, existing);
     }
 
-    // (스팟, 어종) 매핑 upsert
+    // (스팟, 어종) 매핑 upsert. 해결된 페어의 키를 모아 뒤이은 정리 단계의 기준으로 쓴다.
     int pairCreated = 0;
     int skipped = 0;
+    Set<String> seedPairKeys = new HashSet<>();
     for (var pair : data.pairs()) {
       Spot spot = spotByName.get(pair.spot());
       Fish fish = fishByName.get(pair.fish());
@@ -134,6 +168,7 @@ public class SpotSeedLoader {
         skipped++;
         continue;
       }
+      seedPairKeys.add(pairKey(spot.getId(), fish.getId()));
       if (majorFishRepository.existsBySpotAndFish(spot, fish)) {
         continue;
       }
@@ -147,5 +182,7 @@ public class SpotSeedLoader {
         data.pairs().size(),
         pairCreated,
         skipped);
+
+    pruneMajorFishes(seedPairKeys);
   }
 }
