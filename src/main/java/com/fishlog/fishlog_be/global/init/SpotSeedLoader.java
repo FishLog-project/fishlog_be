@@ -5,6 +5,7 @@ import com.fishlog.fishlog_be.domain.fish.repository.FishRepository;
 import com.fishlog.fishlog_be.domain.spot.entity.MajorFish;
 import com.fishlog.fishlog_be.domain.spot.entity.Spot;
 import com.fishlog.fishlog_be.domain.spot.entity.SpotCategory;
+import com.fishlog.fishlog_be.domain.spot.repository.InlandSpotDetailRepository;
 import com.fishlog.fishlog_be.domain.spot.repository.MajorFishRepository;
 import com.fishlog.fishlog_be.domain.spot.repository.SpotRepository;
 import com.fishlog.fishlog_be.global.init.dto.SpotFishSeedData;
@@ -45,6 +46,7 @@ public class SpotSeedLoader {
   private final SpotRepository spotRepository;
   private final FishRepository fishRepository;
   private final MajorFishRepository majorFishRepository;
+  private final InlandSpotDetailRepository inlandSpotDetailRepository;
 
   @Transactional
   public void load() {
@@ -91,8 +93,10 @@ public class SpotSeedLoader {
    * 시드에 없는 스팟을 삭제한다. 시드 JSON이 스팟 목록의 단일 진실 공급원이므로 {@code spots}를 시드와 일치시킨다.
    *
    * <p>스팟 이름이 바뀌면(예: 중복 분리로 {@code 위천} → {@code 위천(1)}·{@code 위천(2)}) upsert 는 새 이름을 만들 뿐 옛 행을 지우지
-   * 않아 고아 스팟이 남는다. 이를 막기 위한 정리 단계다. {@code spots}를 참조하는 것은 {@code major_fish} 뿐이라(사용자 데이터 없음) 어종
-   * 정리와 달리 보류 조건이 없다.
+   * 않아 고아 스팟이 남는다. 이를 막기 위한 정리 단계다. 실측 상세가 없어 시드에서 제외된 담수 스팟(6곳)도 여기서 DB 에서 지워진다.
+   *
+   * <p>{@code spots}를 참조하는 것은 {@code major_fish}와 {@code inland_spot_detail} 뿐이라(사용자 데이터 없음) 어종 정리와
+   * 달리 보류 조건이 없다. 다만 <b>FK 참조를 먼저 끊어야</b> 스팟 행을 지울 수 있다.
    */
   private void pruneSpots(Set<String> seedNames) {
     int deleted = 0;
@@ -101,6 +105,7 @@ public class SpotSeedLoader {
         continue;
       }
       long unmapped = majorFishRepository.deleteBySpot(spot);
+      inlandSpotDetailRepository.deleteBySpot(spot);
       spotRepository.delete(spot);
       deleted++;
       log.info("[seed] 시드에서 빠진 스팟 삭제: {}(id={}, 매핑 {}건)", spot.getName(), spot.getId(), unmapped);

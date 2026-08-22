@@ -1,8 +1,19 @@
 """spot_master.json → 시드 로더용 JSON 2종을 생성한다.
 
 입력  : data/spot/spot_master.json   (확정 데이터셋 — 담수 50 + 바다 49 = 99곳, 어종 24종)
-출력  : data/spot/spots_seed.json      → SpotSeedData  (spots 테이블 시드)
-        data/spot/spot_fish_seed.json  → SpotFishSeedData (major_fish 매핑 시드)
+출력  : data/spot/spots_seed.json          → SpotSeedData  (spots 테이블 시드)
+        data/spot/spot_fish_seed.json      → SpotFishSeedData (major_fish 매핑 시드)
+        data/spot/inland_detail_seed.json  → InlandDetailSeedData (inland_spot_detail 시드)
+
+주의 — 실측 상세가 없는 담수 스팟은 제외한다:
+  담수 스팟의 상세(하폭·유수폭·수심)는 국립생태원 전국자연환경조사 담수어류 조사기록에서
+  왔는데, 조사에서 빠졌거나(조사기록 0건) 어류만 조사되고 하천 제원이 기록되지 않은 곳이
+  6곳 있다. 이 스팟들은 상세 정보를 영영 채울 수 없어 **서비스에서 제외**한다
+  (spot_master.json 의 detail 이 null 인 담수 스팟 = 제외 대상).
+
+  제외는 시드 생성 단계에서만 일어나고 원본(spot_master.json)에는 조사 결과 그대로
+  남겨 둔다. 제외된 스팟은 시드에 없으므로 SpotSeedLoader 의 정리(prune) 단계가
+  이미 적재된 DB 행도 major_fish 매핑과 함께 지운다.
 
 주의 — 이름 중복 처리(거리 기준 분리/병합):
   Spot.name 에 UNIQUE 제약이 있고 SpotSeedLoader 가 name 으로 upsert 하므로,
@@ -49,9 +60,14 @@ BASE = pathlib.Path(__file__).resolve().parent
 MASTER = BASE / "spot_master.json"
 SPOTS_OUT = BASE / "spots_seed.json"
 SPOT_FISH_OUT = BASE / "spot_fish_seed.json"
+INLAND_DETAIL_OUT = BASE / "inland_detail_seed.json"
 
 SOURCE_NOTE = (
     "data/spot/spot_master.json (담수=국립생태원 지점실측, 바다=바다낚시지수 지점실측 + 해역 어획통계)"
+)
+
+INLAND_DETAIL_SOURCE_NOTE = (
+    "data/spot/spot_master.json detail (국립생태원 전국자연환경조사 담수어류 — 스팟 반경 약 350m 조사기록 집계, 단위 m)"
 )
 
 # 같은 이름의 두 지점을 "같은 장소"로 볼 최대 거리(km).
@@ -65,8 +81,21 @@ MARINE_FISH_CAP = 6
 
 # 자르기 대상 스팟 category / 유지할 데이터 등급.
 MARINE_CATEGORY = "바다"
+INLAND_CATEGORY = "담수"
 TIER_OBSERVED = "지점실측"
 TIER_REGIONAL = "해역통계"
+
+# 담수 스팟 상세(하폭·유수폭·수심) 필드. 최소/최대 쌍이라 병합 시 min/max 로 접는다.
+# DETAIL_KEYS 의 순서가 곧 출력 JSON 의 필드 순서다.
+DETAIL_KEYS = (
+    "riverWidthMin",
+    "riverWidthMax",
+    "flowWidthMin",
+    "flowWidthMax",
+    "depthMin",
+    "depthMax",
+)
+DETAIL_MIN_KEYS = frozenset(("riverWidthMin", "flowWidthMin", "depthMin"))
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -109,6 +138,7 @@ def resolve_duplicate_names(raw_spots: list[dict]) -> tuple[list[dict], list[str
         primary = dict(base)
         if len(near) > 1:
             primary["fishes"] = union_fishes(near)
+            primary["detail"] = merge_details(near)
             for other in near[1:]:
                 km = haversine_km(base["lat"], base["lng"], other["lat"], other["lng"])
                 merged.append(f"{name} id={other['id']} → id={base['id']} (거리 {km:.2f}km, 어종 합집합)")
@@ -136,6 +166,29 @@ def union_fishes(spots: list[dict]) -> list[dict]:
         for fish in spot["fishes"]:
             by_fish_name.setdefault(fish["name"], fish)
     return [by_fish_name[n] for n in sorted(by_fish_name)]
+
+
+def has_detail(spot: dict) -> bool:
+    """담수 상세(하폭·유수폭·수심)가 하나라도 실측된 스팟인지."""
+    detail = spot.get("detail")
+    return bool(detail) and any(detail.get(k) is not None for k in DETAIL_KEYS)
+
+
+def merge_details(spots: list[dict]) -> dict | None:
+    """같은 장소로 병합된 스팟들의 상세를 하나로 접는다.
+
+    최소는 더 작은 값, 최대는 더 큰 값을 택해 **두 조사지점을 아우르는 범위**로 만든다
+    (한쪽만 값이 있으면 그 값이 그대로 남는다). 전부 비면 None.
+    """
+    details = [s["detail"] for s in spots if has_detail(s)]
+    if not details:
+        return None
+    merged: dict[str, float | None] = {}
+    for key in DETAIL_KEYS:
+        values = [d[key] for d in details if d.get(key) is not None]
+        pick = min if key in DETAIL_MIN_KEYS else max
+        merged[key] = pick(values) if values else None
+    return merged
 
 
 def trim_marine_fishes(spots: list[dict]) -> list[str]:
@@ -203,7 +256,16 @@ def main() -> None:
     master = json.loads(MASTER.read_text(encoding="utf-8"))
     raw_spots = master["spots"]
 
-    kept, merged, split = resolve_duplicate_names(raw_spots)
+    # 실측 상세(하폭·유수폭·수심)가 없는 담수 스팟은 서비스에서 제외한다(모듈 docstring 참고).
+    usable = []
+    excluded = []
+    for spot in raw_spots:
+        if spot["category"] == INLAND_CATEGORY and not has_detail(spot):
+            excluded.append(spot)
+        else:
+            usable.append(spot)
+
+    kept, merged, split = resolve_duplicate_names(usable)
     # 이름 병합으로 어종이 합집합될 수 있으므로 중복 처리 뒤에 자른다.
     trimmed = trim_marine_fishes(kept)
 
@@ -234,12 +296,34 @@ def main() -> None:
         "pairs": pairs,
     }
 
-    for path, payload in ((SPOTS_OUT, spots_payload), (SPOT_FISH_OUT, spot_fish_payload)):
+    # inland_detail_seed.json — 담수 스팟 상세(하폭·유수폭·수심). 스팟명 기준으로 적재된다.
+    inland_details = [
+        {"spot": s["name"], **{k: s["detail"][k] for k in DETAIL_KEYS}}
+        for s in sorted(kept, key=lambda s: s["name"])
+        if s["category"] == INLAND_CATEGORY
+    ]
+    inland_payload = {
+        "source": INLAND_DETAIL_SOURCE_NOTE,
+        "unit": "meter",
+        "spotCount": len(inland_details),
+        "details": inland_details,
+    }
+
+    for path, payload in (
+        (SPOTS_OUT, spots_payload),
+        (SPOT_FISH_OUT, spot_fish_payload),
+        (INLAND_DETAIL_OUT, inland_payload),
+    ):
         path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
-    print(f"원본 {len(raw_spots)}곳 → 채택 {len(kept)}곳 / 어종 {len(fishes)}종 / 페어 {len(pairs)}개")
+    print(
+        f"원본 {len(raw_spots)}곳 → 제외 {len(excluded)}곳 → 채택 {len(kept)}곳"
+        f" / 어종 {len(fishes)}종 / 페어 {len(pairs)}개 / 담수 상세 {len(inland_details)}곳"
+    )
+    for spot in excluded:
+        print(f"  [상세 없음 제외] {spot['name']} id={spot['id']} ({spot['type']}, 조사기록 {spot.get('matchedRecords', 0)}건)")
     for line in merged:
         print(f"  [동일 장소 병합] {line}")
     for line in split:
