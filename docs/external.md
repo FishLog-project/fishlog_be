@@ -37,10 +37,11 @@
 - **수집 규모:** 전체 약 1,750건 × 2구분 = 3,500 레코드 → **고유 위치명(`seafsPstnNm`) 49개**. 이 49개가 곧 스팟 종류 수(추후 추가 가능). 대상 어종은 **7종**(감성돔·농어·돌돔·벵에돔·우럭·참돔 + `기타어종`), (스팟,어종) 페어 **160개**.
 - **대상 어종은 시점 불변(실측):** 7일치 전량 비교 결과 `seafsTgfshNm`은 **오전/오후·날짜에 무관하게 스팟별 고정**(294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건). 따라서 예보가 아니라 **정적 매핑(`major_fish`)으로 저장**한다 → `docs/spec.md`.
 - **어종 값 처리:** 플레이스홀더 `-`(대상어종 없음)는 시드에서 **제외**. catch-all `기타어종`은 확정 데이터셋에서 **실제 어종으로 대체**되어 더 이상 포함되지 않는다 → `docs/spec.md` 설계 결정 사항.
-- **⚠️ 이 API는 더 이상 시드의 단독 출처가 아니다:** 스팟·어종은 **`data/spot/spot_master.json`(확정 데이터셋, 스팟 99행·어종 24종)** 으로 확정되었고, 이 API의 지점실측 6종은 그 일부(바다 스팟의 `source="지점실측"`)로 편입됐다. 나머지는 국립생태원 담수 실측·해역 어획통계에서 온다. → `docs/spec.md` "스팟·어종 확정 데이터셋".
+- **⚠️ 이 API는 더 이상 시드의 단독 출처가 아니다:** 스팟·어종은 **`data/spot/spot_master.json`(확정 데이터셋, 스팟 99행 → 적재 92곳·어종 24종)** 으로 확정되었고, 이 API의 지점실측 6종은 그 일부(바다 스팟의 `source="지점실측"`)로 편입됐다. 나머지는 국립생태원 담수 실측·해역 어획통계에서 온다. → `docs/spec.md` "스팟·어종 확정 데이터셋".
 - **시드 생성 스크립트:** `data/spot/build_seed.py` — `spot_master.json`을 읽어 두 시드를 생성한다(API 호출 없음). 결과:
-  - `data/spot/spots_seed.json` — 스팟 `name`/`lat`/`lot`/`category` (spots 시드, 이름 중복 분리/병합 후 98곳). `category`("바다"/"담수")는 `Spot.category`(해양/내륙)로 적재 → `docs/spec.md`.
-  - `data/spot/spot_fish_seed.json` — 어종 24종 + (스팟, 어종) 페어 593개 (major_fish 시드)
+  - `data/spot/spots_seed.json` — 스팟 `name`/`lat`/`lot`/`category` (spots 시드, 실측 상세 없는 담수 6곳 제외 + 이름 중복 분리/병합 후 92곳). `category`("바다"/"담수")는 `Spot.category`(해양/내륙)로 적재 → `docs/spec.md`.
+  - `data/spot/spot_fish_seed.json` — 어종 24종 + (스팟, 어종) 페어 552개 (major_fish 시드)
+  - `data/spot/inland_detail_seed.json` — 내륙 스팟 43곳의 하폭·유수폭·수심(단위 m, inland_spot_detail 시드) → `docs/spec.md` "담수 스팟 상세 시드"
   - (참고) `spot.py`(위치명 집계)·`fishDex.py`(어종명 전역 집계)·`seed.py`(구 API 수집기)는 **탐색·이력용**. 현재 시드 생성 경로는 `build_seed.py` 하나다.
   - 로더: 생성된 시드 JSON은 `global/init`의 `SeedDataReader`/`SeedDataInitializer`가 읽어 `SpotSeedLoader`(upsert)로 적재한다. → `docs/spec.md`.
 - **연동 방식(불변 정보):** 실시간 호출이 아니라 **사전 수집(배치) 후 시드 적재**. 스팟 좌표(`spots`)·대상 어종 카탈로그(`major_fish`)는 불변이므로 초기 1회(또는 스팟 추가·주기 재수집 시) 수집 → DB seed.

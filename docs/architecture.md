@@ -21,10 +21,11 @@ com.fishlog.fishlog_be
 │  │  ├─ exception/UserErrorCode.java          # U001~U004
 │  │  ├─ entity/User.java  repository/UserRepository.java
 │  ├─ spot                       # 스팟 목록/상세 + MajorFish
-│  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/{id}(상세=DB+대상어종+실시간 예보)
-│  │  ├─ service/SpotService (+Impl)  dto/SpotResponse · SpotDetailResponse · ForecastResponse
-│  │  ├─ entity/Spot.java · SpotCategory.java(해양/내륙) · MajorFish.java  exception/SpotErrorCode.java  # S001 SPOT_NOT_FOUND
-│  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java
+│  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/{id}(상세=DB+대상어종+해양 예보/내륙 하천 제원)
+│  │  ├─ service/SpotService (+Impl)  dto/SpotResponse · SpotDetailResponse · ForecastResponse · InlandDetailResponse
+│  │  ├─ entity/Spot.java · SpotCategory.java(해양/내륙) · MajorFish.java · InlandSpotDetail.java(내륙 하천 제원, spots와 1:1)
+│  │  ├─ exception/SpotErrorCode.java  # S001 SPOT_NOT_FOUND
+│  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java  repository/InlandSpotDetailRepository.java
 │  ├─ fish                       # 어종 전체 도감(마스터 카탈로그)
 │  │  ├─ controller/FishController.java     # GET /api/fish/{id} (상세만 공개; 목록은 제거, dex가 대체)
 │  │  ├─ service/FishService.java · FishServiceImpl.java
@@ -49,7 +50,7 @@ com.fishlog.fishlog_be
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
    ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
-   ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, SeedDataReader (+dto) — 스팟/어종 시드 적재
+   ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, InlandDetailSeedLoader, SeedDataReader (+dto) — 스팟/어종/담수 상세 시드 적재
    └─ exception
       ├─ model/BaseErrorCode.java             # 에러 코드 인터페이스 (code/message/status)
       ├─ GlobalErrorCode.java                 # 전역 에러 코드 enum (G001~G006)
@@ -220,7 +221,7 @@ public class SpotController implements SpotControllerSpec {
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (docs/media.md) | 📋 |
-| `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
+| `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`·`InlandDetailSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
 | `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |
 
