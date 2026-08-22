@@ -40,7 +40,7 @@
 - **⚠️ 이 API는 더 이상 시드의 단독 출처가 아니다:** 스팟·어종은 **`data/spot/spot_master.json`(확정 데이터셋, 스팟 99행·어종 24종)** 으로 확정되었고, 이 API의 지점실측 6종은 그 일부(바다 스팟의 `source="지점실측"`)로 편입됐다. 나머지는 국립생태원 담수 실측·해역 어획통계에서 온다. → `docs/spec.md` "스팟·어종 확정 데이터셋".
 - **시드 생성 스크립트:** `data/spot/build_seed.py` — `spot_master.json`을 읽어 두 시드를 생성한다(API 호출 없음). 결과:
   - `data/spot/spots_seed.json` — 스팟 `name`/`lat`/`lot`/`category` (spots 시드, 이름 중복 분리/병합 후 98곳). `category`("바다"/"담수")는 `Spot.category`(해양/내륙)로 적재 → `docs/spec.md`.
-  - `data/spot/spot_fish_seed.json` — 어종 24종 + (스팟, 어종) 페어 717개 (major_fish 시드)
+  - `data/spot/spot_fish_seed.json` — 어종 24종 + (스팟, 어종) 페어 593개 (major_fish 시드)
   - (참고) `spot.py`(위치명 집계)·`fishDex.py`(어종명 전역 집계)·`seed.py`(구 API 수집기)는 **탐색·이력용**. 현재 시드 생성 경로는 `build_seed.py` 하나다.
   - 로더: 생성된 시드 JSON은 `global/init`의 `SeedDataReader`/`SeedDataInitializer`가 읽어 `SpotSeedLoader`(upsert)로 적재한다. → `docs/spec.md`.
 - **연동 방식(불변 정보):** 실시간 호출이 아니라 **사전 수집(배치) 후 시드 적재**. 스팟 좌표(`spots`)·대상 어종 카탈로그(`major_fish`)는 불변이므로 초기 1회(또는 스팟 추가·주기 재수집 시) 수집 → DB seed.
