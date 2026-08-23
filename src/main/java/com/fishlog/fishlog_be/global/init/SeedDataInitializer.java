@@ -15,6 +15,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>이어서 {@link FishContentSeedLoader}가 어종 도감 콘텐츠(설명·서식지)를 채운다. 어종 행이 먼저 존재해야 하므로 스팟 시드 <b>다음</b>에
  * 실행한다.
+ *
+ * <p>마지막으로 {@link InlandDetailSeedLoader}가 내륙(담수) 스팟의 하천 제원(하폭·유수폭·수심)을 채운다. 스팟 행을 참조하므로 역시 스팟 시드
+ * 다음이다.
  */
 @Component
 @ConditionalOnProperty(name = "fishlog.seed.enabled", havingValue = "true")
@@ -24,6 +27,7 @@ public class SeedDataInitializer {
 
   private final SpotSeedLoader spotSeedLoader;
   private final FishContentSeedLoader fishContentSeedLoader;
+  private final InlandDetailSeedLoader inlandDetailSeedLoader;
 
   @PostConstruct
   public void init() {
@@ -34,5 +38,9 @@ public class SeedDataInitializer {
     log.info("[seed] 어종 도감 콘텐츠 적재 시작");
     fishContentSeedLoader.load();
     log.info("[seed] 어종 도감 콘텐츠 적재 완료");
+
+    log.info("[seed] 담수 스팟 상세 적재 시작");
+    inlandDetailSeedLoader.load();
+    log.info("[seed] 담수 스팟 상세 적재 완료");
   }
 }
