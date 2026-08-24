@@ -18,6 +18,16 @@ repositories {
 	mavenCentral()
 }
 
+ext {
+    awsSdkVersion = '2.25.60'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "software.amazon.awssdk:bom:${awsSdkVersion}"
+    }
+}
+
 dependencies {
     // web
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
