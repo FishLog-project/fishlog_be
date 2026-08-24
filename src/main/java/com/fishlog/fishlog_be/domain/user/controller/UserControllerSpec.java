@@ -3,6 +3,7 @@ package com.fishlog.fishlog_be.domain.user.controller;
 import com.fishlog.fishlog_be.domain.user.dto.MyProfileResponse;
 import com.fishlog.fishlog_be.domain.user.dto.NicknameUpdateRequest;
 import com.fishlog.fishlog_be.domain.user.dto.PasswordUpdateRequest;
+import com.fishlog.fishlog_be.domain.user.dto.ProfileImageResponse;
 import com.fishlog.fishlog_be.domain.user.dto.WithdrawRequest;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +15,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.web.multipart.MultipartFile;
 
 /** 마이페이지(User) API Swagger 문서(문서 전용). → docs/architecture.md, docs/security.md */
 @Tag(name = "User API", description = "마이페이지(내 프로필/닉네임/비밀번호) API")
@@ -192,4 +194,58 @@ public interface UserControllerSpec {
                             """)))
   })
   BaseResponse<Void> withdraw(@Parameter(hidden = true) Long userId, WithdrawRequest request);
+
+  @Operation(
+      summary = "프로필 이미지 업로드/변경",
+      security = @SecurityRequirement(name = "JWT"),
+      description =
+          """
+          ### 설명
+          - 로그인한 사용자의 프로필 이미지를 업로드(또는 교체)합니다. 기존 이미지가 있으면 삭제됩니다.
+          - `Authorization: Bearer {accessToken}` 필요.
+
+          ### 요청 형식 (multipart/form-data)
+          - `image` 파트에 이미지 파일을 담아 전송합니다.
+          - 이미지 파일만 허용, 최대 5MB.
+
+          ### ⚠ 예외상황
+          - `401`: 인증 토큰 없음/무효
+          - `USER_NOT_FOUND(404)`: 토큰의 사용자가 존재하지 않음
+          - `EMPTY_FILE(400)`: 파일 없음 / `INVALID_FILE_TYPE(400)`: 이미지 아님 / `FILE_SIZE_EXCEEDED(400)`: 5MB 초과
+          - `UPLOAD_FAILED(500)`: S3 업로드 실패
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "업로드 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = ProfileImageResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "프로필 이미지가 변경되었습니다.",
+                              "data": { "profileImageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/profile/uuid.png" }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "파일 검증 실패",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 400, "message": "이미지 파일만 업로드할 수 있습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<ProfileImageResponse> uploadProfileImage(
+      @Parameter(hidden = true) Long userId, MultipartFile image);
 }

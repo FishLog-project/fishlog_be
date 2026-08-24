@@ -1,6 +1,8 @@
 package com.fishlog.fishlog_be.global.s3;
 
 import com.fishlog.fishlog_be.global.exception.CustomException;
+import java.io.IOException;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,9 +12,6 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-
-import java.io.IOException;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -43,7 +42,8 @@ public class S3ServiceImpl implements S3Service {
               .contentType(file.getContentType())
               .contentLength(file.getSize())
               .build();
-      s3Client.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+      s3Client.putObject(
+          request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
     } catch (IOException e) {
       log.error("S3 업로드 실패: key={}, {}", key, e.getMessage());
       throw new CustomException(S3ErrorCode.UPLOAD_FAILED);

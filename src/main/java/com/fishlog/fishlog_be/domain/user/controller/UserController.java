@@ -3,18 +3,23 @@ package com.fishlog.fishlog_be.domain.user.controller;
 import com.fishlog.fishlog_be.domain.user.dto.MyProfileResponse;
 import com.fishlog.fishlog_be.domain.user.dto.NicknameUpdateRequest;
 import com.fishlog.fishlog_be.domain.user.dto.PasswordUpdateRequest;
+import com.fishlog.fishlog_be.domain.user.dto.ProfileImageResponse;
 import com.fishlog.fishlog_be.domain.user.dto.WithdrawRequest;
 import com.fishlog.fishlog_be.domain.user.service.UserService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /** 마이페이지(User) API. 문서는 {@link UserControllerSpec}. → docs/security.md */
 @RestController
@@ -52,5 +57,13 @@ public class UserController implements UserControllerSpec {
       @AuthenticationPrincipal Long userId, @Valid @RequestBody WithdrawRequest request) {
     userService.withdraw(userId, request.password());
     return BaseResponse.success("회원탈퇴가 완료되었습니다.", null);
+  }
+
+  @Override
+  @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public BaseResponse<ProfileImageResponse> uploadProfileImage(
+      @AuthenticationPrincipal Long userId, @RequestPart("image") MultipartFile image) {
+    String url = userService.updateProfileImage(userId, image);
+    return BaseResponse.success("프로필 이미지가 변경되었습니다.", new ProfileImageResponse(url));
   }
 }
