@@ -21,15 +21,15 @@
 | ✅ | PATCH | `/api/users/me/nickname` | 닉네임 변경(마이페이지) | 보호 |
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
-| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, DB 불변 정보만) | 공개 |
-| 📋 | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + **실시간 예보(낚시지수·날씨·물때·대상 어종)** 병합 | 공개 |
-| ✅ | GET | `/api/fish` | 전체 도감 목록(수집 대상 어종 + 총 수). `?name=`으로 이름 완전일치 검색 | 공개 |
+| ✅ | POST | `/api/users/me/profile-image` | 프로필 이미지 업로드/변경(multipart, S3) | 보호 |
+| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`(해양/내륙)) | 공개 |
+| ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **해양: 실시간 예보 / 내륙: 하천 제원(하폭·유수폭·수심)** | 공개 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
 | ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
-| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(Top3+전체, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
-| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(Top3+전체, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
+| ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
+| ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 
 > 위 경로는 초안입니다. 도메인 확정 시 Request/Response 스키마와 함께 상세화.
 
@@ -139,9 +139,11 @@
 #### `GET /api/users/me` — 내 프로필 조회 ✅
 ```jsonc
 // Response(data)
-{ "userId": 1, "email": "angler@gmail.com", "nickname": "붕어킬러" }
+{ "userId": 1, "email": "angler@gmail.com", "nickname": "붕어킬러",
+  "profileImageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/profile/uuid.png" }
 ```
 - 토큰의 사용자가 없으면 `404 USER_NOT_FOUND`, 미인증 `401`.
+- `profileImageUrl`은 미설정 시 `null`(기본 이미지는 클라이언트 처리).
 
 #### `PATCH /api/users/me/nickname` — 닉네임 변경 ✅
 ```jsonc
@@ -172,34 +174,87 @@
 - 비밀번호 불일치 `400 INVALID_CURRENT_PASSWORD`, 사용자 미존재 `404 USER_NOT_FOUND`.
 - **하드 삭제**: 사용자(`users`) + 그 사용자의 **도감 인증기록(`catch_record`)** 을 함께 삭제하고 refresh(`auth:refresh:{userId}`)를 무효화한다. `catch_record.user_id`는 FK가 아니라(plain Long) DB 캐스케이드가 없어 명시 삭제하며, 남기면 랭킹에 유령 userId로 잡힌다. 되돌릴 수 없다.
 
-### 전체 도감 (어종 카탈로그) ✅
+#### `POST /api/users/me/profile-image` — 프로필 이미지 업로드/변경 ✅
 
-**`GET /api/fish`** — 전체 도감 목록 / 이름 검색. 공개. 페이징 없음, `id` 오름차순. `fishes`의 **모든 행**(확정 24종)을 반환한다.
+`multipart/form-data`로 `image` 파트에 이미지 파일을 담아 전송. S3(`profile/` 경로)에 업로드하고 URL을 `users.profile_image_url`에 저장한다. 기존 이미지가 있으면 삭제(best-effort). → `docs/media.md`
+```jsonc
+// Request: multipart/form-data
+//   image=<이미지 파일>   (이미지만, 최대 5MB)
+// Response(data)
+{ "profileImageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/profile/uuid.png" }
+```
+- 파일 검증(`global/s3` 에서 수행): 파일 없음 `EMPTY_FILE(400)`, 이미지 아님 `INVALID_FILE_TYPE(400)`, 5MB 초과 `FILE_SIZE_EXCEEDED(400)`, 업로드 실패 `UPLOAD_FAILED(500)`.
+- 사용자 미존재 `404 USER_NOT_FOUND`, 미인증 `401`.
 
-| 파라미터 | 타입 | 필수 | 설명 |
+### 낚시 스팟 (`/api/spots`) ✅
+
+#### `GET /api/spots/{id}` — 스팟 상세 ✅
+
+DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분류별 상세**를 병합한다. 분류별 상세는 `category`에 따라 **배타적**이다.
+
+| category | 채워지는 필드 | 성격 | 출처 |
 |---|---|---|---|
-| `name` | String | 선택 | 어종명 **완전일치** 검색. 있으면 일치 어종만(0~1건), 없거나 공백이면 전체 목록. |
+| `해양` | `forecast` (`inlandDetail`은 `null`) | 예보성(가변) — 저장 안 함, 요청 시 외부 호출 + Redis 12h 캐시 | 바다낚시지수 API → `docs/external.md` §1 |
+| `내륙` | `inlandDetail` (`forecast`는 `null`) | 실측(불변) — 시드로 DB 저장, 외부 호출 없음 | 국립생태원 전국자연환경조사 담수어류 |
 
-- `name` 검색은 `fishes` 전체를 대상으로 한다. 도감에서 숨겨진 어종이라는 개념이 없기 때문이다(아래 "`is_collectible` 제거" 참고).
-- 일치하는 어종이 없으면 **404가 아니라 `200 + 빈 목록`**(`totalCount:0`). 컬렉션 필터이므로 "조건에 맞는 것 없음"은 정상 응답이다(단건 지목인 `GET /api/fish/{id}`의 404와 대비).
+`forecast`는 **오늘 날짜(KST) + 현재 시각의 오전/오후 1건**(단일 객체). 서버가 `predcYmd == 오늘` 且 `predcNoonSeCd == 오전|오후`(현재 시각 0~11시=오전, 12시~=오후)로 필터한다.
 
-```json
+```jsonc
+// Response(data)
 {
-  "success": true,
-  "code": 200,
-  "message": "요청이 성공적으로 처리되었습니다.",
-  "data": {
-    "totalCount": 6,
-    "fishes": [
-      { "id": 1, "name": "감성돔", "imageUrl": null, "rarity": "USUALLY" }
-    ]
+  "spotId": 1,
+  "name": "가거도",
+  "lat": 34.07308,
+  "lot": 125.08805,
+  "prohibit": false,
+  "category": "해양",
+  "majorFishes": ["감성돔", "참돔"],
+  "forecast": {
+    "predcYmd": "2026-08-19", "predcNoonSeCd": "오전",
+    "totalIndex": "보통",               // 낚시지수(라벨)
+    "tdlvHrCn": "중조기",               // 물때 내용
+    "minWvhgt": 0.4, "maxWvhgt": 0.4,   // 파고(m)
+    "minWtem": 27.7, "maxWtem": 27.8,   // 수온(℃)
+    "minArtmp": 28.3, "maxArtmp": 28.5, // 기온(℃)
+    "minCrsp": 0.2, "maxCrsp": 0.8,     // 유속
+    "minWspd": 4.2, "maxWspd": 4.8      // 풍속
+  },
+  "inlandDetail": null                  // 해양 스팟은 항상 null
+}
+```
+
+```jsonc
+// Response(data) — 내륙(담수) 스팟
+{
+  "spotId": 50,
+  "name": "갈곡천",
+  "lat": 35.51816,
+  "lot": 126.6797,
+  "prohibit": false,
+  "category": "내륙",
+  "majorFishes": ["붕어", "잉어", "피라미"],
+  "forecast": null,                     // 내륙 스팟은 항상 null
+  "inlandDetail": {
+    "riverWidthMin": 70.0, "riverWidthMax": 83.0,  // 하폭(m)
+    "flowWidthMin": 15.0,  "flowWidthMax": 60.0,   // 유수폭(m)
+    "depthMin": 0.2,       "depthMax": 1.5         // 수심(m)
   }
 }
 ```
 
-`GET /api/fish?name=감성돔` → `totalCount:1` + 감성돔 1건. `GET /api/fish?name=없는어종` → `totalCount:0` + 빈 목록.
+- **`category`**: `해양`/`내륙`. **내륙 스팟은 예보 대상이 아니라 `forecast`가 항상 `null`**(예보 API를 아예 호출하지 않음). 반대로 **해양 스팟은 `inlandDetail`이 항상 `null`**이다.
+- **`forecast: null`**: (해양) 예보 외부 호출 실패·타임아웃, 매칭 예보 없음, **오늘·현재 시간대 예보 없음**, 또는 **내륙 스팟**. 이 경우에도 기본정보·대상 어종은 정상 `200`으로 응답한다(graceful degradation).
+- **`inlandDetail`**: 하폭·유수폭·수심의 최소/최대(단위 **m**). DB 저장값이라 매 호출 동일하며 외부 실패 경로가 없다. **6개 값은 개별 nullable** — 조사에서 하폭만 기록되고 유수폭·수심이 빠진 스팟이 있다(복하천·자호천·춘천호상류). 6개가 전부 빈 스팟은 아예 서비스에서 제외했다(아래 "스팟·어종 확정 데이터셋").
+  - **하폭**: 둔치까지 포함한 하천 바닥 전체 폭. **유수폭**: 실제 물이 흐르는 구간의 폭(하폭보다 좁다).
+- **`SPOT_NOT_FOUND(404, S001)`**: 해당 id의 스팟이 없는 경우.
+- 예보 수치 필드는 파싱 실패 시 개별 `null`(방어적 매핑). `predcNoonSeCd`는 `오전`/`오후` 문자열, `predcYmd`는 `yyyy-MM-dd`.
+- 낚시지수 점수(`lastScr`)·물때 점수(`tdlvHrScr`)는 문서 스키마엔 정수로 있으나 **v2 실응답에서 값을 주지 않아(키 생략) 항상 null** → 응답에서 **제외**한다(낚시지수는 라벨 `totalIndex`, 물때는 내용 `tdlvHrCn`만 제공).
 
-**`GET /api/fish/{id}`** — 어종 상세. 공개. 해당 id가 없으면 404(`F001` 해당 어종을 찾을 수 없습니다.).
+### 전체 도감 (어종 카탈로그) ✅
+
+> **목록 `GET /api/fish` 는 제거됨.** 전체 어종 그리드는 로그인 도감(`GET /api/collections/dex`)이 `caught` 여부와 함께 내려주므로 별도 공개 목록이 불필요해졌다. 상세만 공개로 남긴다. 목록 조립 로직(`FishService.getFishList`)은 `dex`가 내부에서 재사용하므로 서비스 계층엔 유지된다.
+
+**`GET /api/fish/{id}`** — 어종 상세. 공개. 해당 id가 없으면 404(`F001` 해당 어종을 찾을 수 없습니다.). 경로 변수 `id`는 `GET /api/collections/dex` 응답의 `data.fishes[].id`를 사용한다.
 
 ```json
 {
@@ -230,14 +285,15 @@
 |---|---|---|
 | **불변** | 위치명·위도·경도(그리고 서비스 운영값 `prohibit`) | DB에 시드 저장(`spots`). 목록/지도 마커·주변 검색에 사용 |
 | **정적 매핑** | 스팟에서 잡히는 대상 어종(`seafsTgfshNm`) | DB에 시드 저장(`major_fish`, `fishes` 연동). 배치로 스팟별 어종 수집·고유화 |
-| **예보성(가변)** | 낚시지수(`totalIndex`/`lastScr`)·날씨(파고·수온·기온·유속·풍속)·물때(`tdlvHrScr`/`tdlvHrCn`) | **저장하지 않음.** 스팟 **상세 조회 시점**에 외부 API를 호출·파싱해 응답에 병합 |
+| **예보성(가변)** | 낚시지수(`totalIndex`)·날씨(파고·수온·기온·유속·풍속)·물때(`tdlvHrCn`) | **저장하지 않음.** 스팟 **상세 조회 시점**에 외부 API를 호출·파싱해 응답에 병합 (해양 전용) |
+| **실측(불변)** | 내륙 스팟의 하폭·유수폭·수심 | DB에 시드 저장(`inland_spot_detail`, 스팟과 1:1). 상세 조회 시 그대로 응답 (내륙 전용) |
 
-**흐름:** `GET /api/spots/{id}` → ① DB에서 스팟 기본정보 + 대상 어종(`major_fish`) 조회 → ② 외부 API 예보(Redis 캐시)에서 해당 스팟의 낚시지수·날씨·물때 파싱 → ③ 병합 응답.
+**흐름:** `GET /api/spots/{id}` → ① DB에서 스팟 기본정보 + 대상 어종(`major_fish`) 조회 → ② **해양 스팟이면** 외부 API 예보(Redis 캐시)에서 낚시지수·날씨·물때 파싱, **내륙 스팟이면** `inland_spot_detail`에서 하천 제원 조회(외부 호출 없음) → ③ 병합 응답. 해양/내륙은 `spots.category`로 분기한다.
 
 **설계 결정 사항**
 - **대상 어종 = 정적 매핑 단일화 ✅(확정):** 대상 어종(`seafsTgfshNm`)은 **오전/오후·날짜에 무관하게 고정**임을 실측으로 확인(7일치 294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건, 스팟별 어종 집합 불변). 따라서 예보가 아니라 **스팟의 정적 속성**으로 취급하여 **`major_fish`에 저장하는 한 갈래로만** 처리한다. (실시간 파싱으로 어종을 뽑는 방식은 폐기.)
   - `major_fish`에 배치로 **(스팟, 어종) 페어**를 수집·고유화하고 `fishes.name`에 매핑. 스팟 상세의 "주요 대상 어종" 목록·도감(`catch_record`)/완성도 기준.
-  - **확정 데이터셋:** 아래 "스팟·어종 확정 데이터셋" 절 참고 — 스팟 **98개**, 어종 **24종**, (스팟,어종) 페어 **717개**.
+  - **확정 데이터셋:** 아래 "스팟·어종 확정 데이터셋" 절 참고 — 스팟 **92개**, 어종 **24종**, (스팟,어종) 페어 **552개**.
   - 어종명→`fishes` 매핑 규칙, `season`(어종 시즌)은 API에 없어 **TBD**.
   - 단, 위 실측은 7일 스냅샷 기준이라 **계절 단위 변동 가능성**은 열려 있음 → 주기적(예: 월 1회) 재수집으로 `major_fish` 갱신 권장.
 - **`기타어종` 처리 ✅(확정 — 정책 변경됨):** 바다낚시지수 API의 catch-all 카테고리 `기타어종`은 특정 어종이 아니라 도감 항목으로 부적절하다. 확정 데이터셋이 이를 **실제 24종으로 대체**해 시드에서 빠졌으므로, **DB에서도 제거**한다.
@@ -253,10 +309,10 @@
     ```
   - **플레이스홀더 `-` 제외 ✅:** 대상어종 없음(`-`)은 실어종이 아니므로 `major_fish` 시드에서 제외한다.
 - **대상 어종 없는 스팟 = 빈 값 허용 ✅(확정):** 스팟의 `major_fish` 매핑이 **0건**이어도 무방하며, 상세 응답의 "주요 대상 어종"은 **빈 값(정보 없음)** 으로 처리한다. (확정 데이터셋에서는 전 스팟이 최소 3종을 가지므로 현재 0건인 스팟은 없다. 예전 바다낚시지수 단독 시드에서는 선상 오프셋 지명 스팟 15개가 여기 해당했다.)
-- **호출 효율/캐싱 ✅:** 예보(낚시지수·날씨·물때)는 API가 스팟 단건 필터 없이 `gubun`별 전체(약 1,750건)를 페이지네이션으로 반환 → 상세 요청마다 원본 호출은 지연·쿼터 위험. **Redis 캐시, 반나절 TTL로 확정**(예보 주기가 `predcYmd`+`predcNoonSeCd`로 굵음). 전체 예보를 캐시하고 상세는 `seafsPstnNm`으로 필터해 서빙.
-- **실패 격리 📋 TBD:** 예보 외부 호출이 상세 응답 경로에 있음 → 타임아웃·재시도·폴백(DB 기본정보+대상 어종은 항상 응답, 예보 블록만 `null`+안내) 정책은 **TBD**. → `docs/external.md` 공통 규칙과 함께 확정.
+- **호출 효율/캐싱 ✅ 구현됨:** 예보(낚시지수·날씨·물때)는 API가 스팟 단건 필터 없이 `gubun`별 전체(약 1,750건)를 페이지네이션으로 반환 → 상세 요청마다 원본 호출은 지연·쿼터 위험. **Redis 캐시, 반나절(12h) TTL로 확정·구현**(예보 주기가 `predcYmd`+`predcNoonSeCd`로 굵음). 전체 예보를 스팟명→예보목록 맵으로 **단일 키에 캐시**하고 상세는 `seafsPstnNm`으로 필터해 서빙. 클라이언트/캐시 계층은 `global/forecast`(`FishingIndexClient`·`ForecastService`) → `docs/external.md` §1.
+- **실패 격리 ✅(확정 — graceful degradation):** 예보 외부 호출 실패·타임아웃 시 **DB 기본정보+대상 어종은 항상 `200` 응답**, `forecast`만 `null`. RestClient 타임아웃 3s, 실패는 로그 warn. (재시도·서킷브레이커·캐시 stampede 방지는 후속 📋)
 - **시드 적재 전략(환경별) 🚧:**
-  - **로컬 ✅:** `data/spot/build_seed.py` 산출 JSON을 `global/init`의 `SeedDataInitializer`(@PostConstruct)+`SpotSeedLoader`가 적재. `fishlog.seed.enabled=true`일 때만 동작한다. **매 기동마다 실행되며** `spots.name`·`fishes.name`·(spot,fish) 조합 기준 upsert라 재실행해도 중복이 생기지 않는다(idempotent). 이어서 시드에 없는 스팟을 정리하고, `FishContentSeedLoader`가 어종 콘텐츠를 채운 뒤 시드에 없는 어종을 정리한다(아래).
+  - **로컬 ✅:** `data/spot/build_seed.py` 산출 JSON을 `global/init`의 `SeedDataInitializer`(@PostConstruct)+`SpotSeedLoader`가 적재. `fishlog.seed.enabled=true`일 때만 동작한다. **매 기동마다 실행되며** `spots.name`·`fishes.name`·(spot,fish) 조합 기준 upsert라 재실행해도 중복이 생기지 않는다(idempotent). 이어서 시드에 없는 스팟을 정리하고, `FishContentSeedLoader`가 어종 콘텐츠를 채운 뒤 시드에 없는 어종을 정리하며, 마지막으로 `InlandDetailSeedLoader`가 내륙 스팟의 하천 제원을 적재한다(아래).
     - 예전에는 `spots.count()>0`이면 통째로 건너뛰는 가드가 있었으나, 시드가 49곳 → 95곳으로 늘어도 **이미 적재된 DB에 새 스팟이 영영 반영되지 않아** 제거했다.
   - **운영(prod) = Flyway 마이그레이션 도입 결정, 구현 📋 TBD:** 운영 시드/레퍼런스 데이터는 **Flyway(버전드 SQL 마이그레이션)로 적재·갱신**한다.
     - **근거:** 어종 카탈로그(`fishes`)를 API 제공 6종 외에 **수동 큐레이션으로 +20~30종 점진 확장**할 예정이라, "비었을 때 1회 적재"(JSON+count 가드)로는 증분 갱신이 안 됨 → 버전드 증분·이력·재현성이 필요.
@@ -268,18 +324,22 @@
 스팟과 어종 목록을 **확정**했다. 원본은 `data/spot/spot_master.json`(단일 진실 공급원)이고, 생성기 `data/spot/build_seed.py`가 로더용 시드 2종을 만든다.
 
 ```
-data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 49)
+data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 49, 담수는 detail 포함)
         │  py -3 data/spot/build_seed.py
         ├─► data/spot/spots_seed.json       # name/lat/lot  → spots
-        └─► data/spot/spot_fish_seed.json   # fishes[], pairs[] → fishes, major_fish
+        ├─► data/spot/spot_fish_seed.json   # fishes[], pairs[] → fishes, major_fish
+        └─► data/spot/inland_detail_seed.json  # 담수 하폭·유수폭·수심 → inland_spot_detail
 ```
 
 | 항목 | 값 |
 |---|---|
 | 원본 스팟 | **99곳** (담수 50 / 바다 49) |
-| 적재 스팟 | **98곳** (이름 중복 4쌍 중 1쌍만 동일 장소로 병합 — 아래) |
+| 제외 스팟 | **6곳** (실측 상세가 없는 담수 스팟 — 아래) |
+| 적재 스팟 | **92곳** (해양 49 / 내륙 43. 이름 중복 4쌍 중 1쌍만 동일 장소로 병합 — 아래) |
 | 어종 | **24종** (바다 스팟 13 / 담수 스팟 11, 교집합 없음) |
-| (스팟, 어종) 페어 | **717개** |
+| 스팟당 어종 수 | 바다 평균 **5.61** (상한 6) / 담수 평균 **6.49** |
+| (스팟, 어종) 페어 | **552개** (바다 275 / 담수 277) |
+| 담수 스팟 상세(`inland_spot_detail`) | **43곳** = 내륙 스팟 전체 |
 
 **데이터 출처·등급 (`spot_master.json`의 `fishes[].source`)**
 
@@ -289,6 +349,25 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `해역통계` | 그 해역의 주요 어획어종(통계 기반 배치) | 해역별 어획통계 7종 |
 
 > 이 등급은 **DB에 저장하지 않는다.** `major_fish`는 (스팟, 어종) 조합만 갖는다. 등급별로 노출을 구분해야 할 필요가 생기면 `major_fish`에 컬럼을 추가한다 📋.
+
+> ⚠️ **`해역통계` 층은 재현 가능한 출처가 없다.** 바다 지점실측은 수집 스크립트(`spot.py`·`seed.py`·`fishDex.py`)와 원본 응답(`fish_species.json`)이 남아 있어 재실행할 수 있지만, 해역통계 7종은 `spot_master.json`에 이미 완성된 형태로 커밋됐고 생성 스크립트·원본이 없다. 어느 기관·데이터셋·연도인지도 기록돼 있지 않다. 갱신하거나 근거를 요구받는 상황에 대비해 출처를 확보하면 `spot_master.json`의 `meta.data_tiers`에 명시할 것 📋.
+
+**바다 스팟 어종 수 상한 ✅(확정)**
+
+바다 스팟은 원래 평균 **8.14종**으로 담수(6.48종)보다 과하게 많았다. 해역통계가 해역 단위로 일괄 배정돼 같은 해역 스팟이 전부 동일한 6~7종을 통째로 받았기 때문이다. 그 결과 **광어는 49곳 전부**, 참돔은 17곳에만 붙는 편중이 생겼다. `build_seed.py`의 `MARINE_FISH_CAP = 6`이 이를 자른다.
+
+| 단계 | 규칙 |
+|---|---|
+| 1 | **지점실측은 전량 유지.** 실제 관측 어종이라 신뢰도가 가장 높고, 스팟당 최대 6종이라 상한을 넘지 않는다 |
+| 2 | 남은 자리는 그 스팟이 속한 **해역의 해역통계 어종**으로 채운다 — 지금까지 **가장 적게 쓰인 어종부터** 고르는 그리디 균형 |
+| 3 | **해역통계 풀이 좁은 해역부터** 처리한다. 서해(3종)를 먼저 채워야 남해(7종)가 그 3종을 피해 다른 어종을 고를 수 있다 |
+
+- 선택 기준을 `(사용 횟수, 이름)` 튜플로 둬 **결정적**이다. 재실행해도 결과가 같아야 `SpotSeedLoader`의 prune이 매 기동마다 삭제→재생성을 반복하지 않는다.
+- 결과: 어종별 등장 스팟 수가 **17~26 범위**로 고르게 분포한다(감성돔·우럭 26 / 갈치·고등어 22 / 광어·방어·볼락·삼치·전갱이 21 / 농어 20 / 돌돔 19 / 벵에돔 18 / 참돔 17). 어종 0곳이나 스팟 0종은 없다.
+- **서해만 평균 4.42종**(최소 3)으로 상한에 못 미친다. 해역통계 풀이 갈치·광어·삼치 3종뿐이기 때문이다. **풀에 없는 어종을 억지로 끼워 넣지 않는다** — 근거 없는 배치를 늘리지 않기 위함이다.
+- 담수 스팟은 전량 지점실측이라 자르지 않는다.
+
+> **왜 "지점실측만 쓰기"를 택하지 않았나:** 해역통계 층을 통째로 빼면 바다는 275 → 126페어(평균 2.57종)가 되는데, **광어·갈치·고등어·방어·볼락·삼치·전갱이 7종은 지점실측 배정이 0건이라 어느 스팟에도 나오지 않는다.** 도감에는 칸이 있는데 어디서 잡는지 앱이 알려주지 못하는 어종이 7개 생기고, 선상 오프셋 지명 **15곳은 어종 0종**이 된다. 도감 완성도 랭킹(`docs/ranking.md`)이 달성 불가능해지므로 채택하지 않았다.
 
 **어종 24종**
 
@@ -301,30 +380,47 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 **설계 결정 사항**
 
+- **실측 상세가 없는 담수 스팟 = 서비스에서 제외 ✅(확정):** 담수 스팟의 상세(하폭·유수폭·수심)는 국립생태원 조사기록에서 왔는데, **조사에서 빠졌거나(조사기록 0건) 어류만 조사되고 하천 제원이 기록되지 않은 곳이 6곳** 있다. 이 스팟들은 상세를 영영 채울 수 없어 **시드에서 제외**한다 — 해양 스팟이 모두 예보를 받는 것과 달리 "상세가 영구히 비는" 스팟이 목록에 남으면 사용자에게 설명할 수 없기 때문이다.
+
+  | 제외 스팟 | 원본 id | 유형 | 조사기록 |
+  |---|---|---|---|
+  | 곡교천 | 2 | 강/하천 | 0건(조사 없음) |
+  | 의암댐유입 | 17 | 저수지 | 22건(어류만) |
+  | 조치원 | 20 | 강/하천 | 6건(어류만) |
+  | 춘천호 | 23 | 저수지 | 17건(어류만) |
+  | 충주 | 25 | 강/하천 | 20건(어류만) |
+  | 파로호 | 26 | 저수지 | 13건(어류만) |
+
+  - **판정 기준:** `spot_master.json`의 `detail`이 `null`이거나 6개 값이 **전부** `null`인 담수 스팟. 하나라도 값이 있으면 유지한다(하폭만 있는 복하천·자호천·춘천호상류는 유지).
+  - **원본은 그대로 둔다.** 제외는 `build_seed.py`(시드 생성) 단계에서만 일어나고 `spot_master.json`에는 조사 결과가 남는다. 나중에 상세를 확보하면 `detail`만 채우면 자동 복귀한다.
+  - **이미 적재된 DB도 정리된다.** 제외 스팟은 시드에 없으므로 `SpotSeedLoader`의 정리(prune) 단계가 `major_fish` 매핑·`inland_spot_detail`과 함께 행을 삭제한다.
+  - **어종 24종은 그대로다** — 제외 6곳의 어종은 모두 다른 담수 스팟에도 등장해 도감에서 사라지는 어종이 없다.
+  - ⚠️ **저수지 유형이 4곳 중 3곳 사라진다**(복하천만 남음). 저수지는 애초에 "하폭·유수폭"이라는 개념이 약해 조사에 기록되지 않은 것이라, 저수지를 되살리려면 **수위·저수율 같은 다른 지표**를 상세로 붙이는 후속 작업이 필요하다 📋.
+
 - **이름 중복 스팟 = 거리로 분리/병합 ✅(확정):** `spots.name`에 UNIQUE 제약이 있어 같은 이름을 그대로 둘 수 없다. `build_seed.py`가 **두 지점 사이 거리**(`DUP_MERGE_KM = 1.0km`)로 갈라 처리한다.
 
   | 이름 | 두 지점 거리 | 처리 |
   |---|---|---|
-  | 와우천 | 0.73km | **병합** — 같은 장소로 보고 어종 목록을 합집합, 좌표는 첫 스팟 기준 |
+  | 와우천 | 0.73km | **병합** — 같은 장소로 보고 어종 목록을 합집합, 좌표는 첫 스팟 기준. **상세는 최소=더 작은 값·최대=더 큰 값**으로 두 조사지점을 아우르는 범위로 접는다 |
   | 만경강 | 6.60km | **분리** → `만경강(1)`, `만경강(2)` |
   | 위천 | 14.79km | **분리** → `위천(1)`, `위천(2)` |
   | 청미천 | 20.73km | **분리** → `청미천(1)`, `청미천(2)` |
 
-  - **왜 바꿨나:** 예전 정책은 `id`가 작은 쪽만 남기고 나머지를 버렸는데, `pairs`도 채택 스팟에서만 만들어져 **버려진 지점의 조사 어종이 통째로 누락**됐다(694 → 717페어로 23개 복구). 특히 위천·청미천은 강 이름만 같을 뿐 15~20km 떨어진 별개 낚시 포인트라 하나로 접으면 안 된다.
+  - **왜 바꿨나:** 예전 정책은 `id`가 작은 쪽만 남기고 나머지를 버렸는데, `pairs`도 채택 스팟에서만 만들어져 **버려진 지점의 조사 어종이 통째로 누락**됐다(당시 694 → 717페어로 23개 복구. 이후 바다 어종 상한과 담수 제외가 도입돼 최종 552페어). 특히 위천·청미천은 강 이름만 같을 뿐 15~20km 떨어진 별개 낚시 포인트라 하나로 접으면 안 된다.
   - **순번을 괄호로 감싸는 이유:** 원본에 조사지점 번호를 붙인 이름(`사정천3`·`의신천2`·`현산천8`)이 이미 있어, 접미사 숫자를 그냥 붙이면 조사지점 번호와 구별되지 않는다.
   - **분리 시 기준 스팟도 순번을 붙인다.** 하나만 원래 이름을 유지하면 사용자가 어느 지점인지 구분할 수 없기 때문이다(`위천`+`위천(2)` ✗ → `위천(1)`+`위천(2)` ✓).
   - ⚠️ **이름 변경 → 고아 스팟:** upsert는 새 이름을 만들 뿐 옛 행을 지우지 않는다. 그래서 `SpotSeedLoader`에 **정리(prune) 단계**를 두어 시드에 없는 스팟을 `major_fish` 매핑과 함께 삭제한다. `spots`를 참조하는 건 `major_fish`뿐이라(사용자 데이터 없음) 어종 정리와 달리 보류 조건이 없다.
   - `build_seed.py`가 병합·분리 결과를 실행 로그에 출력한다.
 
-- **`category`·`region`·`type`은 DB 미저장 📋(명세만):** 원본은 아래 3개 필드를 갖지만 **`Spot` 엔티티에 컬럼이 없어 적재하지 않는다.** 원본 JSON에는 보존되어 있으므로, 컬럼을 추가하는 시점에 `build_seed.py`가 `spots_seed.json`에 함께 내보내고 `SpotSeed` 레코드·`SpotSeedLoader`만 확장하면 된다.
+- **`category`는 DB 저장 ✅ / `region`·`type`은 아직 미저장 📋:** 원본은 아래 3개 필드를 갖는다. `category`는 `spots.category`(`SpotCategory` enum 해양/내륙)로 적재됨(`build_seed.py`가 `spots_seed.json`에 내보내고 `SpotSeed`·`SpotSeedLoader`가 매핑). `region`·`type`은 아직 컬럼이 없어 원본 JSON에만 보존 — 필요 시 같은 방식으로 확장한다.
 
-  | 필드 | 값 | 용도(예정) |
-  |---|---|---|
-  | `category` | `담수` / `바다` | 스팟 목록·지도 필터, 담수/바다 도감 분기 |
-  | `region` | `강원도`·`경기도`·`동해`·`남해`·`서해`·`제주` 등 (원본 50곳은 `null`) | 지역별 조회. **null 허용 필수** — 담수 29곳이 미기재 |
-  | `type` | `강/하천`·`저수지`·`농수로`·`바다` | 스팟 유형 배지·필터 |
+  | 필드 | 값 | 저장 | 용도 |
+  |---|---|---|---|
+  | `category` | `바다`→해양 / `담수`→내륙 | ✅ `spots.category` | 스팟 목록·지도 필터, 담수/바다 도감 분기, 상세 예보 분기 |
+  | `region` | `강원도`·`경기도`·`동해`·`남해`·`서해`·`제주` 등 (원본 50곳은 `null`) | 📋 미저장 | 지역별 조회. **null 허용 필수** — 담수 29곳이 미기재 |
+  | `type` | `강/하천`·`저수지`·`농수로`·`바다` | 📋 미저장 | 스팟 유형 배지·필터 |
 
-  - 도입 시 `category`·`type`은 값 집합이 닫혀 있어 **enum**(`SpotCategory`, `SpotType`)이 적합하고, `region`은 표기가 행정구역(`강원도`)과 해역(`동해`)으로 섞여 있어 **정규화 후** 컬럼화할 것.
+  - `category`는 값 집합이 닫혀 있어 **enum `SpotCategory`(해양/내륙)** 로 도입 완료. `type`도 도입 시 enum(`SpotType`)이 적합하고, `region`은 표기가 행정구역(`강원도`)과 해역(`동해`)으로 섞여 있어 **정규화 후** 컬럼화할 것.
 
 ## 어종 도감 콘텐츠 시드 ✅
 
@@ -350,6 +446,25 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
   - 삭제 전 `major_fish`의 FK 참조를 먼저 끊는다(`MajorFishRepository.deleteByFish`). 삭제된 매핑 건수가 0보다 크면 스팟 시드가 아직 그 어종을 참조한다는 뜻이라 `WARN`을 남긴다.
   - **⚠️ 인증 기록 가드:** 그 어종에 `catch_record`가 **하나라도 있으면 삭제를 보류**하고 `WARN`만 남긴다. 어종 행을 지우면 사용자가 인증한 기록까지 사라지기 때문이다. 숨김 플래그가 없으므로 **그 어종은 시드에 없는데도 도감에 그대로 남는다** — WARN을 보면 시드를 되돌리거나 기록 이관 여부를 결정해야 한다. 확정 24종에서는 발생하지 않는 경로다.
   - 로그: `[seed] 어종 콘텐츠: 총 N건 (신규 N / 갱신 N / 삭제 N / 삭제보류 N)`. **배포 후 이 줄로 정리 결과를 확인**한다.
+
+## 담수 스팟 상세 시드 ✅
+
+내륙 스팟의 하폭·유수폭·수심을 **로컬 기동 시 자동 적재**한다. 데이터는 `data/spot/inland_detail_seed.json`(원본은 `spot_master.json`의 `detail`), 적재는 `global/init/InlandDetailSeedLoader`.
+
+| 항목 | 내용 |
+|---|---|
+| 시드 파일 | `data/spot/inland_detail_seed.json` (`build_seed.py` 산출물) |
+| 경로 프로퍼티 | `fishlog.seed.inland-detail-location` (기본 `file:data/spot/inland_detail_seed.json`) |
+| 스키마 | `{ "details": [ { "spot", "riverWidthMin", "riverWidthMax", "flowWidthMin", "flowWidthMax", "depthMin", "depthMax" } ] }` — `spot`이 `spots.name`(UNIQUE)과 매칭되는 키 |
+| 대상 | 내륙 스팟 **43곳** 전체 |
+| 실행 시점 | `SeedDataInitializer`가 **스팟 시드 다음에** 호출 (스팟 행이 먼저 존재해야 하므로) |
+| 활성 조건 | `fishlog.seed.enabled=true` (= 로컬 전용, 운영은 Flyway 트랙) |
+
+**설계 결정 사항**
+- **적용 정책 = 항상 덮어쓰기 ✅:** 어종 콘텐츠 시드와 동일하게 기동마다 시드 값으로 덮어쓴다(값이 같으면 Hibernate가 UPDATE를 생략).
+- **스팟명으로 매칭 ✅:** `spots.name`이 UNIQUE라 시드 키로 쓴다. 스팟이 없거나 내륙이 아니면 `WARN` 후 스킵(예외 아님).
+- **정리(prune) ✅:** 시드에 없는 상세는 삭제한다. 스팟 자체가 빠진 경우는 `SpotSeedLoader`가 스팟과 함께 지우므로, 이 단계가 잡는 건 **스팟은 남았는데 상세만 빠진 경우**(예: 해양으로 재분류)다. 참조하는 테이블도 사용자 데이터도 없어 보류 조건이 없다.
+- 로그: `[seed] 담수 스팟 상세: 총 N건 (신규 N / 갱신 N / 삭제 N / 스킵 N)`.
 
 ## 사용자 도감 (어종 인증) — `catch_record` ✅
 
@@ -396,7 +511,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ### `GET /api/collections/dex` — 내 도감 그리드 ✅ (보호)
 
-도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 전체 도감(`GET /api/fish`)과 동일한 순서·집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다.
+도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 `id` 오름차순 전체 집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다. (어종 목록 조립은 `FishService.getFishList`를 내부 재사용한다.)
 
 - **인증 필요:** `Authorization: Bearer {accessToken}`. 파라미터 없음(신원은 토큰).
 - `caught=true`면 도감 이미지(`imageUrl`), `false`면 같은 이미지를 그림자(실루엣)로 렌더한다. **그림자는 클라이언트 이펙트**라 서버는 플래그만 내려준다.
@@ -429,11 +544,12 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
-| `users` | 사용자 | `id`, `username`(email, UNIQUE), `password_hash`, `nickname`(UNIQUE) |
+| `users` | 사용자 | `id`, `username`(email, UNIQUE), `password_hash`, `nickname`(UNIQUE), `profile_image_url`(nullable) |
 | `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
-| `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit` |
+| `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit`, `category`(ENUM 해양/내륙) |
+| `inland_spot_detail` | 내륙(담수) 스팟의 하천 제원 — `spots`와 **1:1** | `spot_id`(PK=FK), `river_width_min/max`(하폭), `flow_width_min/max`(유수폭), `depth_min/max`(수심). 단위 m, 각 값 nullable |
 
 ### users (사용자) — 엔티티 ✅ / 가입 흐름 📋
 자체 이메일/비밀번호 로그인 주체. 회원가입은 **이메일/비밀번호/닉네임만** 받는다. 엔티티(`User`)·`UserRepository`·가입/로그인 엔드포인트 모두 구현됨. 인증 흐름·정책은 `docs/security.md`. (엔티티 필드: `password_hash` 컬럼은 자바 필드명 `password`로 매핑.)
@@ -444,6 +560,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `username` | VARCHAR | NOT NULL, UNIQUE | 로그인 이메일 |
 | `password_hash` | VARCHAR | NOT NULL | BCrypt 해시(평문 저장 금지) |
 | `nickname` | VARCHAR | NOT NULL, UNIQUE | 표시 이름(2~10자) |
+| `profile_image_url` | VARCHAR | nullable | 프로필 이미지 S3 URL(미설정 시 null). `POST /api/users/me/profile-image`로 설정 → `docs/media.md` |
 
 - `BaseTimeEntity` 상속 → `created_at`/`modified_at` 자동(`docs/conventions.md`).
 - 이메일 인증코드·refresh 토큰은 **DB가 아닌 Redis**에 저장(`auth:email:*`, `auth:refresh:*`).
@@ -459,10 +576,28 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `lat` | DOUBLE | NOT NULL | 위도 | API `lat` |
 | `lot` | DOUBLE | NOT NULL | 경도 | API `lot` |
 | `prohibit` | BOOLEAN | NOT NULL | 낚시 금지 여부(기본 false) | 서비스 운영값(API 아님) |
+| `category` | ENUM(STRING) | nullable | 분류 **해양/내륙** | 시드 `category`(바다→해양·담수→내륙) |
 
-- 현재 **49행**(고유 위치명, 추후 추가 가능). `name`에 **UNIQUE 확정**(엔티티 `@Column(unique = true)`) — 시드 upsert 기준 키로 사용.
+- 현재 **92행**(확정 데이터셋: 해양 49/내륙 43 — 실측 상세가 없는 담수 6곳 제외). `name`에 **UNIQUE 확정**(엔티티 `@Column(unique = true)`) — 시드 upsert 기준 키로 사용.
 - 좌표는 ERD v0.1의 FLOAT 대신 **`double`로 매핑**(위경도 소수 5자리 정밀도 보존).
-- 예보성 필드(낚시지수·날씨·물때·대상 어종)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
+- `category`(`SpotCategory` enum 해양/내륙)는 `@Enumerated(STRING)`로 저장(값 "해양"/"내륙"). `ddl-auto=update`가 컬럼을 자동 추가하고, 기존 행은 재기동 시 시드가 backfill하므로 nullable. **상세 조회에서 해양=실시간 예보 병합 / 내륙=하천 제원(`inland_spot_detail`) 병합** 분기 기준이다.
+- 예보성 필드(낚시지수·날씨·물때)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
+
+### inland_spot_detail (내륙 스팟 하천 제원) ✅
+국립생태원 전국자연환경조사 담수어류의 **실측 하천 제원**을 시드로 저장한다. 해양 스팟의 예보가 "가변이라 저장하지 않는" 데이터라면, 이쪽은 **불변이라 저장하는** 데이터다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `spot_id` | BIGINT | **PK = FK(`spots.id`)** | 스팟과 1:1 (`@MapsId`) |
+| `river_width_min` / `river_width_max` | DOUBLE | nullable | 하폭(m) — 둔치까지 포함한 하천 바닥 전체 폭 |
+| `flow_width_min` / `flow_width_max` | DOUBLE | nullable | 유수폭(m) — 실제 물이 흐르는 구간의 폭 |
+| `depth_min` / `depth_max` | DOUBLE | nullable | 수심(m) |
+
+- 현재 **43행** = 내륙 스팟 전체. 해양 스팟에는 행이 없고, 상세 응답의 `inlandDetail`도 `null`이다.
+- **왜 `spots` 컬럼이 아니라 별도 테이블인가:** 하폭·유수폭은 바다에 존재하지 않는 개념이라, `spots`에 넣으면 해양 49행에서 6칸이 영구히 `null`이 된다. 1:1 테이블로 분리하면 "내륙 전용 상세"라는 의미가 스키마에 드러나고, 나중에 수질·수위 같은 담수 전용 필드가 늘어도 여기만 확장하면 된다.
+- **각 값은 개별 nullable** — 조사에서 하폭만 기록되고 유수폭·수심이 빠진 스팟이 있다(복하천·자호천·춘천호상류). 6개가 전부 비는 스팟은 시드 생성 단계에서 제외되므로 이 테이블에 들어오지 않는다.
+- `spots`를 참조하므로 스팟 삭제 전에 이 행을 먼저 지운다(`SpotSeedLoader`의 정리 단계).
+- `ddl-auto=update`가 테이블을 자동 생성하므로 **수동 DDL이 필요 없다**(`is_collectible` 제거 때와 달리 추가만 하는 변경).
 
 ```
 User(users) 1 ──< catch_record >── 1 Fish(fishes)   # 사용자 도감(어종 인증 1건=1행)

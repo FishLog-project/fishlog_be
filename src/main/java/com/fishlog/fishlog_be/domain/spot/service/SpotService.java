@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.domain.spot.service;
 
+import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
 import java.util.List;
 
@@ -8,4 +9,12 @@ public interface SpotService {
 
   /** 스팟 전체 목록 조회(지도 마커용). */
   List<SpotResponse> getSpots();
+
+  /**
+   * 스팟 상세 조회. DB 기본정보 + 대상 어종에 실시간 예보를 병합한다.
+   *
+   * @param id 스팟 id
+   * @return 상세 응답(예보 실패/미매칭 시 forecast=null)
+   */
+  SpotDetailResponse getSpotDetail(Long id);
 }

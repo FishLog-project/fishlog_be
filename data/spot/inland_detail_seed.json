@@ -1,0 +1,394 @@
+{
+  "source": "data/spot/spot_master.json detail (국립생태원 전국자연환경조사 담수어류 — 스팟 반경 약 350m 조사기록 집계, 단위 m)",
+  "unit": "meter",
+  "spotCount": 43,
+  "details": [
+    {
+      "spot": "갈곡천",
+      "riverWidthMin": 70.0,
+      "riverWidthMax": 83.0,
+      "flowWidthMin": 15.0,
+      "flowWidthMax": 60.0,
+      "depthMin": 0.2,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "고읍천",
+      "riverWidthMin": 50.0,
+      "riverWidthMax": 80.0,
+      "flowWidthMin": 2.0,
+      "flowWidthMax": 50.0,
+      "depthMin": 0.3,
+      "depthMax": 1.0
+    },
+    {
+      "spot": "고창천",
+      "riverWidthMin": 75.0,
+      "riverWidthMax": 100.0,
+      "flowWidthMin": 23.0,
+      "flowWidthMax": 70.0,
+      "depthMin": 0.5,
+      "depthMax": 2.0
+    },
+    {
+      "spot": "고척천",
+      "riverWidthMin": 50.0,
+      "riverWidthMax": 80.0,
+      "flowWidthMin": 10.0,
+      "flowWidthMax": 26.0,
+      "depthMin": 0.3,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "곡릉천",
+      "riverWidthMin": 70.0,
+      "riverWidthMax": 80.0,
+      "flowWidthMin": 50.0,
+      "flowWidthMax": 60.0,
+      "depthMin": 2.0,
+      "depthMax": 3.0
+    },
+    {
+      "spot": "단곡천",
+      "riverWidthMin": 10.0,
+      "riverWidthMax": 20.0,
+      "flowWidthMin": 1.0,
+      "flowWidthMax": 2.0,
+      "depthMin": 0.1,
+      "depthMax": 0.3
+    },
+    {
+      "spot": "대천",
+      "riverWidthMin": 80.0,
+      "riverWidthMax": 200.0,
+      "flowWidthMin": 5.0,
+      "flowWidthMax": 100.0,
+      "depthMin": 0.1,
+      "depthMax": 1.8
+    },
+    {
+      "spot": "동복천",
+      "riverWidthMin": 88.0,
+      "riverWidthMax": 300.0,
+      "flowWidthMin": 22.0,
+      "flowWidthMax": 70.0,
+      "depthMin": 0.05,
+      "depthMax": 1.3
+    },
+    {
+      "spot": "동항",
+      "riverWidthMin": 50.0,
+      "riverWidthMax": 120.0,
+      "flowWidthMin": 2.0,
+      "flowWidthMax": 70.0,
+      "depthMin": 0.1,
+      "depthMax": 1.8
+    },
+    {
+      "spot": "마륜천",
+      "riverWidthMin": 50.0,
+      "riverWidthMax": 80.0,
+      "flowWidthMin": 20.0,
+      "flowWidthMax": 40.0,
+      "depthMin": 0.5,
+      "depthMax": 1.8
+    },
+    {
+      "spot": "마지",
+      "riverWidthMin": 350.0,
+      "riverWidthMax": 400.0,
+      "flowWidthMin": 100.0,
+      "flowWidthMax": 300.0,
+      "depthMin": 0.1,
+      "depthMax": 1.2
+    },
+    {
+      "spot": "만경강(1)",
+      "riverWidthMin": 10.0,
+      "riverWidthMax": 600.0,
+      "flowWidthMin": 3.0,
+      "flowWidthMax": 150.0,
+      "depthMin": 0.2,
+      "depthMax": 1.0
+    },
+    {
+      "spot": "만경강(2)",
+      "riverWidthMin": 250.0,
+      "riverWidthMax": 1000.0,
+      "flowWidthMin": 200.0,
+      "flowWidthMax": 600.0,
+      "depthMin": 0.0,
+      "depthMax": 15.0
+    },
+    {
+      "spot": "보통천",
+      "riverWidthMin": 20.0,
+      "riverWidthMax": 69.0,
+      "flowWidthMin": 10.0,
+      "flowWidthMax": 36.0,
+      "depthMin": 0.3,
+      "depthMax": 1.2
+    },
+    {
+      "spot": "복하천",
+      "riverWidthMin": 150.0,
+      "riverWidthMax": 250.0,
+      "flowWidthMin": null,
+      "flowWidthMax": null,
+      "depthMin": null,
+      "depthMax": null
+    },
+    {
+      "spot": "사정천3",
+      "riverWidthMin": 18.0,
+      "riverWidthMax": 100.0,
+      "flowWidthMin": 20.0,
+      "flowWidthMax": 30.0,
+      "depthMin": 1.0,
+      "depthMax": 2.0
+    },
+    {
+      "spot": "소양천",
+      "riverWidthMin": 150.0,
+      "riverWidthMax": 255.0,
+      "flowWidthMin": 30.0,
+      "flowWidthMax": 187.0,
+      "depthMin": 0.3,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "송전천",
+      "riverWidthMin": 70.0,
+      "riverWidthMax": 100.0,
+      "flowWidthMin": 3.0,
+      "flowWidthMax": 25.0,
+      "depthMin": 0.1,
+      "depthMax": 1.3
+    },
+    {
+      "spot": "신평천",
+      "riverWidthMin": 8.0,
+      "riverWidthMax": 15.0,
+      "flowWidthMin": 5.0,
+      "flowWidthMax": 10.0,
+      "depthMin": 0.0,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "양천16",
+      "riverWidthMin": 100.0,
+      "riverWidthMax": 200.0,
+      "flowWidthMin": 10.0,
+      "flowWidthMax": 100.0,
+      "depthMin": 0.2,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "오대천",
+      "riverWidthMin": 100.0,
+      "riverWidthMax": 200.0,
+      "flowWidthMin": 30.0,
+      "flowWidthMax": 40.0,
+      "depthMin": 0.1,
+      "depthMax": 0.6
+    },
+    {
+      "spot": "오산",
+      "riverWidthMin": 90.0,
+      "riverWidthMax": 190.0,
+      "flowWidthMin": 10.0,
+      "flowWidthMax": 30.0,
+      "depthMin": 0.05,
+      "depthMax": 1.2
+    },
+    {
+      "spot": "온수천",
+      "riverWidthMin": 5.0,
+      "riverWidthMax": 60.0,
+      "flowWidthMin": 0.5,
+      "flowWidthMax": 50.0,
+      "depthMin": 0.1,
+      "depthMax": 1.8
+    },
+    {
+      "spot": "와우천",
+      "riverWidthMin": 25.0,
+      "riverWidthMax": 50.0,
+      "flowWidthMin": 15.0,
+      "flowWidthMax": 35.0,
+      "depthMin": 0.5,
+      "depthMax": 2.0
+    },
+    {
+      "spot": "원평천",
+      "riverWidthMin": 80.0,
+      "riverWidthMax": 180.0,
+      "flowWidthMin": 30.0,
+      "flowWidthMax": 80.0,
+      "depthMin": 0.1,
+      "depthMax": 1.0
+    },
+    {
+      "spot": "월하천",
+      "riverWidthMin": 25.0,
+      "riverWidthMax": 60.0,
+      "flowWidthMin": 10.0,
+      "flowWidthMax": 50.0,
+      "depthMin": 0.2,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "위천(1)",
+      "riverWidthMin": 170.0,
+      "riverWidthMax": 200.0,
+      "flowWidthMin": 10.0,
+      "flowWidthMax": 150.0,
+      "depthMin": 0.5,
+      "depthMax": 1.0
+    },
+    {
+      "spot": "위천(2)",
+      "riverWidthMin": 15.0,
+      "riverWidthMax": 20.0,
+      "flowWidthMin": 1.0,
+      "flowWidthMax": 8.0,
+      "depthMin": 0.5,
+      "depthMax": 1.0
+    },
+    {
+      "spot": "유등천",
+      "riverWidthMin": 140.0,
+      "riverWidthMax": 200.0,
+      "flowWidthMin": 40.0,
+      "flowWidthMax": 110.0,
+      "depthMin": 0.3,
+      "depthMax": 1.0
+    },
+    {
+      "spot": "의신천2",
+      "riverWidthMin": 12.0,
+      "riverWidthMax": 60.0,
+      "flowWidthMin": 2.0,
+      "flowWidthMax": 20.0,
+      "depthMin": 0.2,
+      "depthMax": 2.0
+    },
+    {
+      "spot": "자호천",
+      "riverWidthMin": 15.0,
+      "riverWidthMax": 20.0,
+      "flowWidthMin": null,
+      "flowWidthMax": null,
+      "depthMin": null,
+      "depthMax": null
+    },
+    {
+      "spot": "전동",
+      "riverWidthMin": 150.0,
+      "riverWidthMax": 200.0,
+      "flowWidthMin": 40.0,
+      "flowWidthMax": 80.0,
+      "depthMin": 0.3,
+      "depthMax": 1.2
+    },
+    {
+      "spot": "지내천",
+      "riverWidthMin": 13.0,
+      "riverWidthMax": 60.0,
+      "flowWidthMin": 2.0,
+      "flowWidthMax": 20.0,
+      "depthMin": 0.1,
+      "depthMax": 0.8
+    },
+    {
+      "spot": "직지천",
+      "riverWidthMin": 70.0,
+      "riverWidthMax": 100.0,
+      "flowWidthMin": 15.0,
+      "flowWidthMax": 50.0,
+      "depthMin": 0.5,
+      "depthMax": 1.2
+    },
+    {
+      "spot": "청미천(1)",
+      "riverWidthMin": 70.0,
+      "riverWidthMax": 500.0,
+      "flowWidthMin": 20.0,
+      "flowWidthMax": 60.0,
+      "depthMin": 0.1,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "청미천(2)",
+      "riverWidthMin": 50.0,
+      "riverWidthMax": 120.0,
+      "flowWidthMin": 30.0,
+      "flowWidthMax": 80.0,
+      "depthMin": 0.3,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "춘천호상류",
+      "riverWidthMin": 50.0,
+      "riverWidthMax": 80.0,
+      "flowWidthMin": null,
+      "flowWidthMax": null,
+      "depthMin": null,
+      "depthMax": null
+    },
+    {
+      "spot": "하빈천",
+      "riverWidthMin": 45.0,
+      "riverWidthMax": 60.0,
+      "flowWidthMin": 3.0,
+      "flowWidthMax": 30.0,
+      "depthMin": 0.3,
+      "depthMax": 1.2
+    },
+    {
+      "spot": "함안천",
+      "riverWidthMin": 15.0,
+      "riverWidthMax": 250.0,
+      "flowWidthMin": 40.0,
+      "flowWidthMax": 70.0,
+      "depthMin": 0.5,
+      "depthMax": 2.0
+    },
+    {
+      "spot": "현산천8",
+      "riverWidthMin": 7.0,
+      "riverWidthMax": 20.0,
+      "flowWidthMin": 1.0,
+      "flowWidthMax": 5.0,
+      "depthMin": 0.2,
+      "depthMax": 1.0
+    },
+    {
+      "spot": "화산천",
+      "riverWidthMin": 25.0,
+      "riverWidthMax": 55.0,
+      "flowWidthMin": 15.0,
+      "flowWidthMax": 30.0,
+      "depthMin": 0.3,
+      "depthMax": 1.5
+    },
+    {
+      "spot": "화정천",
+      "riverWidthMin": 0.5,
+      "riverWidthMax": 58.0,
+      "flowWidthMin": 0.3,
+      "flowWidthMax": 12.0,
+      "depthMin": 0.1,
+      "depthMax": 0.7
+    },
+    {
+      "spot": "황룡강합류점3",
+      "riverWidthMin": 30.0,
+      "riverWidthMax": 50.0,
+      "flowWidthMin": 5.0,
+      "flowWidthMax": 20.0,
+      "depthMin": 0.2,
+      "depthMax": 0.8
+    }
+  ]
+}

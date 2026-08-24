@@ -27,21 +27,25 @@
   | `lat` | number | 위도 | ✅ `lat` |
   | `lot` | number | 경도(longitude) | ✅ `lot` |
   | `seafsTgfshNm` | string | 대상 어종명 | ✅ `major_fish`(정적 매핑, 스팟별 어종) |
-  | `totalIndex` / `lastScr` / `tdlvHrScr` | - | 낚시지수·점수 | ✖ 예보성 |
-  | `predcYmd` / `predcNoonSeCd` | string | 예보 일자·오전/오후 구분 | ✖ 예보성 |
-  | `minWvhgt`/`maxWvhgt`/`minWtem`/`maxWtem`/`minArtmp`/`maxArtmp`/`minCrsp`/`maxCrsp`/`minWspd`/`maxWspd`/`tdlvHrCn` | - | 파고·수온·기온·유속·풍속·물때 | ✖ 예보성(향후 §3 날씨/물때에서 재활용 여지) |
+  | `totalIndex` | string | 낚시지수(라벨) | ✖ 예보성 |
+  | `predcYmd` / `predcNoonSeCd` | string | 예보 일자(`yyyy-MM-dd`)·오전/오후 구분(`오전`/`오후`, 먼 날은 `일`) | ✖ 예보성 |
+  | `tdlvHrCn` | string | 물때(내용, 예: "중조기") | ✖ 예보성 |
+  | `minWvhgt`/`maxWvhgt`/`minWtem`/`maxWtem`/`minArtmp`/`maxArtmp`/`minCrsp`/`maxCrsp`/`minWspd`/`maxWspd` | number | 파고·수온·기온·유속·풍속 | ✖ 예보성 |
+
+  > ⚠️ 실제 v2 응답 확인(2026-08): `predcYmd`는 하이픈 포함 `yyyy-MM-dd`, `predcNoonSeCd`는 `오전`/`오후`(먼 날은 `일`). **낚시지수 점수(`lastScr`)·물때 점수(`tdlvHrScr`)는 문서 스키마엔 정수로 있으나 v2 실응답에서 값을 주지 않아(키 생략) 항상 null → 응답 매핑에서 제외**한다(낚시지수는 라벨 `totalIndex`, 물때는 `tdlvHrCn`만 제공).
 
 - **수집 규모:** 전체 약 1,750건 × 2구분 = 3,500 레코드 → **고유 위치명(`seafsPstnNm`) 49개**. 이 49개가 곧 스팟 종류 수(추후 추가 가능). 대상 어종은 **7종**(감성돔·농어·돌돔·벵에돔·우럭·참돔 + `기타어종`), (스팟,어종) 페어 **160개**.
 - **대상 어종은 시점 불변(실측):** 7일치 전량 비교 결과 `seafsTgfshNm`은 **오전/오후·날짜에 무관하게 스팟별 고정**(294개 (스팟,일자) 조합에서 오전 vs 오후 차이 0건). 따라서 예보가 아니라 **정적 매핑(`major_fish`)으로 저장**한다 → `docs/spec.md`.
 - **어종 값 처리:** 플레이스홀더 `-`(대상어종 없음)는 시드에서 **제외**. catch-all `기타어종`은 확정 데이터셋에서 **실제 어종으로 대체**되어 더 이상 포함되지 않는다 → `docs/spec.md` 설계 결정 사항.
-- **⚠️ 이 API는 더 이상 시드의 단독 출처가 아니다:** 스팟·어종은 **`data/spot/spot_master.json`(확정 데이터셋, 스팟 99행·어종 24종)** 으로 확정되었고, 이 API의 지점실측 6종은 그 일부(바다 스팟의 `source="지점실측"`)로 편입됐다. 나머지는 국립생태원 담수 실측·해역 어획통계에서 온다. → `docs/spec.md` "스팟·어종 확정 데이터셋".
+- **⚠️ 이 API는 더 이상 시드의 단독 출처가 아니다:** 스팟·어종은 **`data/spot/spot_master.json`(확정 데이터셋, 스팟 99행 → 적재 92곳·어종 24종)** 으로 확정되었고, 이 API의 지점실측 6종은 그 일부(바다 스팟의 `source="지점실측"`)로 편입됐다. 나머지는 국립생태원 담수 실측·해역 어획통계에서 온다. → `docs/spec.md` "스팟·어종 확정 데이터셋".
 - **시드 생성 스크립트:** `data/spot/build_seed.py` — `spot_master.json`을 읽어 두 시드를 생성한다(API 호출 없음). 결과:
-  - `data/spot/spots_seed.json` — 스팟 `name`/`lat`/`lot` (spots 시드, 이름 중복 분리/병합 후 98곳)
-  - `data/spot/spot_fish_seed.json` — 어종 24종 + (스팟, 어종) 페어 717개 (major_fish 시드)
+  - `data/spot/spots_seed.json` — 스팟 `name`/`lat`/`lot`/`category` (spots 시드, 실측 상세 없는 담수 6곳 제외 + 이름 중복 분리/병합 후 92곳). `category`("바다"/"담수")는 `Spot.category`(해양/내륙)로 적재 → `docs/spec.md`.
+  - `data/spot/spot_fish_seed.json` — 어종 24종 + (스팟, 어종) 페어 552개 (major_fish 시드)
+  - `data/spot/inland_detail_seed.json` — 내륙 스팟 43곳의 하폭·유수폭·수심(단위 m, inland_spot_detail 시드) → `docs/spec.md` "담수 스팟 상세 시드"
   - (참고) `spot.py`(위치명 집계)·`fishDex.py`(어종명 전역 집계)·`seed.py`(구 API 수집기)는 **탐색·이력용**. 현재 시드 생성 경로는 `build_seed.py` 하나다.
   - 로더: 생성된 시드 JSON은 `global/init`의 `SeedDataReader`/`SeedDataInitializer`가 읽어 `SpotSeedLoader`(upsert)로 적재한다. → `docs/spec.md`.
 - **연동 방식(불변 정보):** 실시간 호출이 아니라 **사전 수집(배치) 후 시드 적재**. 스팟 좌표(`spots`)·대상 어종 카탈로그(`major_fish`)는 불변이므로 초기 1회(또는 스팟 추가·주기 재수집 시) 수집 → DB seed.
-- **연동 방식(예보성 정보):** 낚시지수·날씨·물때는 **저장하지 않고 상세 조회 시 실시간 호출**. 단, 매 요청 원본 호출(전체 1,750건)은 지연·쿼터 위험 → **Redis 캐시(반나절 TTL)**로 전체 예보를 캐싱하고 `seafsPstnNm`으로 필터해 서빙. 타임아웃·폴백 정책은 📋 TBD. → `docs/spec.md` "스팟 데이터 설계".
+- **연동 방식(예보성 정보) ✅ 구현됨:** 낚시지수·날씨·물때는 저장하지 않고 스팟 상세 조회(`GET /api/spots/{id}`) 시 실시간 호출한다. 서버 런타임 클라이언트 계층 **`global/forecast`**(`FishingIndexClient`=API 호출·파싱, `ForecastService`=캐시·필터)를 신설했다. 매 요청 원본 호출(전체 1,750건)은 지연·쿼터 위험이라, 두 구분(갯바위·선상) 전체 예보를 받아 **스팟명→예보목록 맵으로 단일 Redis 키에 12h(`RedisConfig.FORECAST_TTL`) 캐시**하고 `seafsPstnNm`으로 필터해 서빙한다. RestClient 타임아웃 3s(`RestClientConfig`), 외부 실패·타임아웃 시 예외를 전파하지 않고 `forecast=null`로 폴백(상세 base 정보는 항상 200) → `docs/spec.md` "스팟 데이터 설계".
 
 > ⚠️ 오프셋 지명 주의: 위치명 중 일부는 기준점 기준 오프셋 표기(예: `강릉항 북동(2km)`, `목포북항 서측(53km)`)입니다. 좌표는 API 응답 `lat`/`lot`을 그대로 신뢰하며, 지명 문자열을 지오코딩하지 않습니다.
 
@@ -51,8 +55,8 @@
 
 ## 3. 날씨 / 물때 / 조위
 - 용도: 스팟 상세에서 낚시 조건(날씨·물때·조위) 제공.
-- 후보: 기상청 API, 바다타임 등. **§1 바다낚시지수 API**가 파고·수온·기온·유속·풍속·물때(예보성) 필드를 이미 포함하므로 재활용 여지 있음(스팟 좌표 매핑이 이미 됨).
-- 확정 필요: 제공처·데이터 종류(예보 범위, 물때표), 갱신 주기, 스팟 좌표 매핑.
+- ✅ **§1 바다낚시지수 API로 구현됨** — 파고·수온·기온·유속·풍속·물때(`tdlvHrCn`)를 해양 스팟 상세(`GET /api/spots/{id}`)의 `forecast`로 제공한다(연동 방식은 §1 참고).
+- 조위표 등 더 상세한 물때/조위 데이터가 필요해지면 별도 제공처(기상청·바다타임 등) 도입 검토 📋.
 
 ## 4. 지도 (Kakao / Naver Map)
 - 용도: 지도 표시, 지오코딩/역지오코딩, 주변 검색 보조 (`docs/geo.md`와 연동).

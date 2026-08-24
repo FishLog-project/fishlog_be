@@ -2,6 +2,7 @@ package com.fishlog.fishlog_be.global.init;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fishlog.fishlog_be.global.init.dto.FishContentSeedData;
+import com.fishlog.fishlog_be.global.init.dto.InlandDetailSeedData;
 import com.fishlog.fishlog_be.global.init.dto.SpotFishSeedData;
 import com.fishlog.fishlog_be.global.init.dto.SpotSeedData;
 import java.io.IOException;
@@ -37,6 +38,9 @@ public class SeedDataReader {
   @Value("${fishlog.seed.fish-content-location:file:data/fish/fish_content_seed.json}")
   private String fishContentLocation;
 
+  @Value("${fishlog.seed.inland-detail-location:file:data/spot/inland_detail_seed.json}")
+  private String inlandDetailLocation;
+
   public SeedDataReader(ResourceLoader resourceLoader) {
     this.resourceLoader = resourceLoader;
   }
@@ -54,6 +58,11 @@ public class SeedDataReader {
   /** fish_content_seed.json → 어종 도감 콘텐츠(설명·서식지). */
   public FishContentSeedData readFishContents() {
     return read(fishContentLocation, FishContentSeedData.class);
+  }
+
+  /** inland_detail_seed.json → 담수 스팟 하천 제원(하폭·유수폭·수심). */
+  public InlandDetailSeedData readInlandDetails() {
+    return read(inlandDetailLocation, InlandDetailSeedData.class);
   }
 
   private <T> T read(String location, Class<T> type) {
