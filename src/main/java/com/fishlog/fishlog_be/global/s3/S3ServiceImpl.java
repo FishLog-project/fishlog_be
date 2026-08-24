@@ -27,7 +27,7 @@ public class S3ServiceImpl implements S3Service {
   @Value("${spring.cloud.aws.s3.bucket}")
   private String bucket;
 
-  @Value("${spring.cloud.aws.region.static}")
+  @Value("${spring.cloud.aws.region.static}") // 응답 URL 문자열 조립
   private String region;
 
   @Override
