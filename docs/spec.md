@@ -21,6 +21,7 @@
 | ✅ | PATCH | `/api/users/me/nickname` | 닉네임 변경(마이페이지) | 보호 |
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
+| ✅ | POST | `/api/users/me/profile-image` | 프로필 이미지 업로드/변경(multipart, S3) | 보호 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`(해양/내륙)) | 공개 |
 | ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **해양: 실시간 예보 / 내륙: 하천 제원(하폭·유수폭·수심)** | 공개 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
@@ -138,9 +139,11 @@
 #### `GET /api/users/me` — 내 프로필 조회 ✅
 ```jsonc
 // Response(data)
-{ "userId": 1, "email": "angler@gmail.com", "nickname": "붕어킬러" }
+{ "userId": 1, "email": "angler@gmail.com", "nickname": "붕어킬러",
+  "profileImageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/profile/uuid.png" }
 ```
 - 토큰의 사용자가 없으면 `404 USER_NOT_FOUND`, 미인증 `401`.
+- `profileImageUrl`은 미설정 시 `null`(기본 이미지는 클라이언트 처리).
 
 #### `PATCH /api/users/me/nickname` — 닉네임 변경 ✅
 ```jsonc
@@ -170,6 +173,18 @@
 ```
 - 비밀번호 불일치 `400 INVALID_CURRENT_PASSWORD`, 사용자 미존재 `404 USER_NOT_FOUND`.
 - **하드 삭제**: 사용자(`users`) + 그 사용자의 **도감 인증기록(`catch_record`)** 을 함께 삭제하고 refresh(`auth:refresh:{userId}`)를 무효화한다. `catch_record.user_id`는 FK가 아니라(plain Long) DB 캐스케이드가 없어 명시 삭제하며, 남기면 랭킹에 유령 userId로 잡힌다. 되돌릴 수 없다.
+
+#### `POST /api/users/me/profile-image` — 프로필 이미지 업로드/변경 ✅
+
+`multipart/form-data`로 `image` 파트에 이미지 파일을 담아 전송. S3(`profile/` 경로)에 업로드하고 URL을 `users.profile_image_url`에 저장한다. 기존 이미지가 있으면 삭제(best-effort). → `docs/media.md`
+```jsonc
+// Request: multipart/form-data
+//   image=<이미지 파일>   (이미지만, 최대 5MB)
+// Response(data)
+{ "profileImageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/profile/uuid.png" }
+```
+- 파일 검증(`global/s3` 에서 수행): 파일 없음 `EMPTY_FILE(400)`, 이미지 아님 `INVALID_FILE_TYPE(400)`, 5MB 초과 `FILE_SIZE_EXCEEDED(400)`, 업로드 실패 `UPLOAD_FAILED(500)`.
+- 사용자 미존재 `404 USER_NOT_FOUND`, 미인증 `401`.
 
 ### 낚시 스팟 (`/api/spots`) ✅
 
@@ -529,7 +544,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
-| `users` | 사용자 | `id`, `username`(email, UNIQUE), `password_hash`, `nickname`(UNIQUE) |
+| `users` | 사용자 | `id`, `username`(email, UNIQUE), `password_hash`, `nickname`(UNIQUE), `profile_image_url`(nullable) |
 | `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
@@ -545,6 +560,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `username` | VARCHAR | NOT NULL, UNIQUE | 로그인 이메일 |
 | `password_hash` | VARCHAR | NOT NULL | BCrypt 해시(평문 저장 금지) |
 | `nickname` | VARCHAR | NOT NULL, UNIQUE | 표시 이름(2~10자) |
+| `profile_image_url` | VARCHAR | nullable | 프로필 이미지 S3 URL(미설정 시 null). `POST /api/users/me/profile-image`로 설정 → `docs/media.md` |
 
 - `BaseTimeEntity` 상속 → `created_at`/`modified_at` 자동(`docs/conventions.md`).
 - 이메일 인증코드·refresh 토큰은 **DB가 아닌 Redis**에 저장(`auth:email:*`, `auth:refresh:*`).

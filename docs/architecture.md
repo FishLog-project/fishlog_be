@@ -14,10 +14,10 @@ com.fishlog.fishlog_be
 │  │  ├─ exception/AuthErrorCode.java          # A001~A010
 │  │  ├─ mail/EmailSender.java                 # 인증코드·비밀번호 재설정 코드 메일 발송
 │  │  └─ service/EmailVerificationService·AuthService·PasswordResetService (+Impl)  # 코드 발송·확인 / 가입·로그인·재발급·로그아웃 / 비밀번호 찾기
-│  ├─ user                       # 로그인 주체 + 마이페이지(내 프로필·닉네임·비밀번호 변경)
-│  │  ├─ controller/UserController.java (+Spec)  # GET /api/users/me, PATCH /me/nickname·/me/password, DELETE /me
-│  │  ├─ service/UserService.java · UserServiceImpl.java  # 프로필·닉네임·비밀번호 변경·회원탈퇴
-│  │  ├─ dto/MyProfileResponse · NicknameUpdateRequest · PasswordUpdateRequest · WithdrawRequest
+│  ├─ user                       # 로그인 주체 + 마이페이지(내 프로필·닉네임·비밀번호·프로필 이미지)
+│  │  ├─ controller/UserController.java (+Spec)  # GET /api/users/me, PATCH /me/nickname·/me/password, DELETE /me, POST /me/profile-image
+│  │  ├─ service/UserService.java · UserServiceImpl.java  # 프로필·닉네임·비밀번호 변경·회원탈퇴·프로필 이미지(S3)
+│  │  ├─ dto/MyProfileResponse · NicknameUpdateRequest · PasswordUpdateRequest · WithdrawRequest · ProfileImageResponse
 │  │  ├─ exception/UserErrorCode.java          # U001~U004
 │  │  ├─ entity/User.java  repository/UserRepository.java
 │  ├─ spot                       # 스팟 목록/상세 + MajorFish
@@ -46,9 +46,10 @@ com.fishlog.fishlog_be
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
-   ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), SwaggerConfig(JWT 스킴)
+   ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), S3Config(S3Client), SwaggerConfig(JWT 스킴)
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
+   ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName·S3ErrorCode. 프로필 이미지 등 → docs/media.md
    ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
    ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, InlandDetailSeedLoader, SeedDataReader (+dto) — 스팟/어종/담수 상세 시드 적재
    └─ exception
@@ -220,7 +221,7 @@ public class SpotController implements SpotControllerSpec {
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
-| `s3` | S3 업로드 서비스·경로·에러 코드 (docs/media.md) | 📋 |
+| `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필 이미지 적용 (docs/media.md) | ✅ |
 | `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`·`InlandDetailSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
 | `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |

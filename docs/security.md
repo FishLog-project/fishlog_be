@@ -101,6 +101,7 @@ GET    /api/users/me            → { userId, email, nickname }
 PATCH  /api/users/me/nickname   { nickname }                       → 유니크 검사 후 교체(동일값 no-op)
 PATCH  /api/users/me/password   { currentPassword, newPassword }   → 현재 비번 확인 후 교체 + refresh 삭제
 DELETE /api/users/me            { password }                       → 현재 비번 확인 후 사용자·도감기록 하드 삭제 + refresh 삭제
+POST   /api/users/me/profile-image  (multipart image)             → S3 업로드 후 profile_image_url 저장(기존 이미지 삭제)
 ```
 
 - **모두 보호 엔드포인트:** `/api/users/**`는 `SecurityConfig`의 `anyRequest().authenticated()`로 자동 보호(별도 매처 불필요). 미인증 → `401`.
@@ -115,7 +116,7 @@ DELETE /api/users/me            { password }                       → 현재 �
 
 - **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 낚시 스팟·어종 등 열람성 조회(`GET /api/spots/**`, `GET /api/fish/**`), 랭킹(`GET /api/rankings/**`), Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
   - **랭킹은 공개지만 토큰을 보면 더 준다:** 목록·Top3는 누구나 조회 가능하고, `Authorization` 헤더가 있으면 필터가 principal(userId)을 세팅해 컨트롤러가 `me`(내 순위)까지 채운다. 토큰이 없으면 `me: null`.
-- **보호(인증 필요):** 마이페이지(`GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`, `DELETE /api/users/me`), 내 도감 조회(`GET /api/collections`, `GET /api/collections/dex`), 어종 도감 인증(`POST /api/collections/verify` 📋) 등 **사용자 소유 리소스**.
+- **보호(인증 필요):** 마이페이지(`GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`, `DELETE /api/users/me`, `POST /api/users/me/profile-image`), 내 도감 조회(`GET /api/collections`, `GET /api/collections/dex`), 어종 도감 인증(`POST /api/collections/verify` 📋) 등 **사용자 소유 리소스**.
   - 사용자 소유 리소스는 신원을 **토큰에서만** 얻는다(`@AuthenticationPrincipal`). `userId`를 요청 파라미터로 받지 않는다 — 받으면 남의 리소스를 조회할 수 있다(IDOR).
 - 보호 리소스는 `Authorization: Bearer {accessToken}` 필수. 누락/무효 → `401`.
 - **권한(Role) 구분은 현재 없음** — 전원 일반 사용자다. 관리자(`ADMIN`) 전용 기능(어종/스팟 마스터 데이터 관리 등)이 필요해지면 그때 `users.role` 컬럼과 함께 도입하고, JWT 클레임에 `role`을 추가한다(`403` 권한 부족 처리 포함).

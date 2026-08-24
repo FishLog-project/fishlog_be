@@ -18,6 +18,16 @@ repositories {
 	mavenCentral()
 }
 
+ext {
+    awsSdkVersion = '2.25.60'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "software.amazon.awssdk:bom:${awsSdkVersion}"
+    }
+}
+
 dependencies {
     // web
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -51,6 +61,9 @@ dependencies {
 
     // swagger-ui
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
+    // AWS S3 (raw SDK v2 — Spring 버전 독립, S3Client 직접 구성)
+    implementation 'software.amazon.awssdk:s3'
 }
 
 tasks.named('test') {

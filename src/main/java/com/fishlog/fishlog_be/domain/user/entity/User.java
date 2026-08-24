@@ -40,6 +40,10 @@ public class User extends BaseTimeEntity {
   @Column(nullable = false, unique = true)
   private String nickname;
 
+  /** 프로필 이미지 URL(S3). 미설정이면 null(기본 이미지는 클라이언트 처리). */
+  @Column(name = "profile_image_url")
+  private String profileImageUrl;
+
   /** 비밀번호 교체(재설정). setter 대신 도메인 메서드로 노출. 인자는 이미 BCrypt로 인코딩된 값이어야 한다. */
   public void changePassword(String encodedPassword) {
     this.password = encodedPassword;
@@ -48,5 +52,10 @@ public class User extends BaseTimeEntity {
   /** 닉네임 변경(마이페이지). 유니크 검증은 서비스 계층에서 선행한다. */
   public void changeNickname(String nickname) {
     this.nickname = nickname;
+  }
+
+  /** 프로필 이미지 URL 교체(업로드 후). */
+  public void changeProfileImage(String profileImageUrl) {
+    this.profileImageUrl = profileImageUrl;
   }
 }
