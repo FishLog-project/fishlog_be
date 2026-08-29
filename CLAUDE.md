@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 기술 스택 (요약)
 
-Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · Redis(인증코드·예보 캐시) · **자체 이메일/비밀번호 로그인 + JWT**(인증코드·Security/JWT 인프라 구현됨, 가입·로그인 엔드포인트 진행중) · Spring Mail(인증코드 발송) · AWS S3(어종 인증 사진, 계획) · SpringDoc OpenAPI 3.0.3 · Lombok · Spotless(코드 포맷)
+Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · Redis(인증코드·예보 캐시) · **자체 이메일/비밀번호 로그인 + JWT** · Spring Mail(인증코드 발송) · AWS S3(프로필·어종 인증 사진) · **자체 어종 분류 AI 모델 서버 연동**(FastAPI on EC2, RestClient) · SpringDoc OpenAPI 3.0.3 · Lombok · Spotless(코드 포맷)
 
 ## 빌드·실행·테스트 (핵심)
 
@@ -56,7 +56,8 @@ Java 21 · Spring Boot 4.1.0 · MySQL · Spring Data JPA(Hibernate) · Redis(인
 | 사용자 랭킹(도감 완성도·최대 크기 기준) 명세·엔드포인트 | `docs/ranking.md` |
 | 낚시 스팟 좌표·주변(반경) 검색·공간 데이터 | `docs/geo.md` |
 | 어종 인증 사진 업로드·S3·이미지 정책 | `docs/media.md` |
+| 어종 분류 AI 모델 서버 연동(계약·재시도·종명 조인 키) | `docs/external.md` §2 |
 | 외부 API 연동(관광 TourAPI·날씨/물때/조위·지도) | `docs/external.md` |
 
-* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 구현된 것: `auth`(이메일 인증·회원가입·로그인/JWT·비밀번호 재설정)·`spot`(목록 `GET /api/spots`)·`fish`(전체 도감 `GET /api/fish`·`/{id}`)·`collection`(내 도감 조회 — 보호)·`ranking`(완성도·크기 — 공개, `me`는 토큰 시)와 Security/JWT·Redis·Swagger·시드 인프라. `user`는 엔티티·리포지토리만 있고 프로필 API는 미구현입니다. 스팟 상세·어종 인증 사진 업로드(S3)·관광 연동은 진행중/계획 단계입니다.
+* 상태 배지: **✅ 구현됨 / 🚧 진행중 / 📋 계획(TBD)**. 현재 구현된 것: `auth`(이메일 인증·회원가입·로그인/JWT·비밀번호 재설정)·`user`(마이페이지·프로필 이미지)·`spot`(목록·상세)·`fish`(어종 상세)·`collection`(내 도감 조회 + **AI 어종 분류 `POST /api/collections/classify`** + **인증 업로드 `POST /api/collections/verify`** — 모두 보호)·`ranking`(완성도·크기 — 공개, `me`는 토큰 시)와 Security/JWT·Redis·S3·**어종 분류 모델 서버 연동(`global/ai`)**·Swagger·시드 인프라. 관광(tour) 연동은 계획 단계입니다.
 * 논의사항이 있을 시 작업을 중단하고 사용자와 논의하여 먼저 해결할 것.
