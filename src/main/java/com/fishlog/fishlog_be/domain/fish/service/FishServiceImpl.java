@@ -34,10 +34,13 @@ public class FishServiceImpl implements FishService {
 
   @Override
   public FishDetailResponse getFishDetail(Long id) {
-    Fish fish =
-        fishRepository
-            .findById(id)
-            .orElseThrow(() -> new CustomException(FishErrorCode.FISH_NOT_FOUND));
-    return FishDetailResponse.from(fish);
+    return FishDetailResponse.from(getFishEntity(id));
+  }
+
+  @Override
+  public Fish getFishEntity(Long id) {
+    return fishRepository
+        .findById(id)
+        .orElseThrow(() -> new CustomException(FishErrorCode.FISH_NOT_FOUND));
   }
 }

@@ -17,6 +17,14 @@ public interface CatchRecordRepository extends JpaRepository<CatchRecord, Long> 
   List<CatchRecord> findByUserIdAndFish_Id(Long userId, Long fishId);
 
   /**
+   * 특정 사용자가 특정 어종을 인증한 횟수.
+   *
+   * <p>인증 직후 "새로운 어종 획득 / N번째 인증"을 판정하려고 행 전체를 가져올 필요는 없어 COUNT 로만 센다(옵션 B에서 잡은 횟수는 저장된 값이 아니라 행
+   * 개수에서 파생한다).
+   */
+  long countByUserIdAndFish_Id(Long userId, Long fishId);
+
+  /**
    * 특정 어종에 대한 인증 기록 존재 여부.
    *
    * <p>시드에서 빠진 어종을 물리 삭제해도 되는지 판단하는 가드다. 기록이 하나라도 있으면 사용자 데이터가 사라지므로 삭제하지 않고 논리 삭제로 남긴다. → {@code
