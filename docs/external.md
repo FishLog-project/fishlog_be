@@ -49,6 +49,100 @@
 
 > ⚠️ 오프셋 지명 주의: 위치명 중 일부는 기준점 기준 오프셋 표기(예: `강릉항 북동(2km)`, `목포북항 서측(53km)`)입니다. 좌표는 API 응답 `lat`/`lot`을 그대로 신뢰하며, 지명 문자열을 지오코딩하지 않습니다.
 
+## 2. 어종 분류 AI — 자체 모델 서버 ✅ (EC2, FastAPI)
+
+사진으로 어종을 분류하는 **자체 모델 서버**. 별도 레포에서 학습·배포하며, 이 백엔드는 호출만 한다.
+
+```
+[앱] 사진 촬영 → [백엔드 EC2] → [모델 EC2 ${MODEL_EC2_HOST}:8000] → [백엔드] → [앱]
+```
+
+- **모델 서버는 상태를 갖지 않는다.** 사용자·인증·도감 매핑은 전부 백엔드 책임이다.
+- ⚠️ **모델 서버에는 인증이 없다.** 보안그룹으로 백엔드 EC2에서만 접근 가능하게 막혀 있으므로, **이 주소를 외부에 노출하거나 클라이언트가 직접 호출하게 만들면 안 된다.** 그래서 `POST /api/collections/classify`도 보호(로그인 필요) 엔드포인트다.
+- 📍 **실제 주소는 이 문서에 적지 않는다.** 이 저장소는 public이므로, `${MODEL_EC2_HOST}`의 실값은 private 설정 서브모듈(`be_config`)의 `external.fish-classify.base-url` 한 곳에만 둔다.
+- 로컬(`local` 프로파일)에서는 사설 IP에 도달할 수 없다 → connect timeout 1초 뒤 `AI008(503)` fallback으로 떨어진다. 정상 동작이다.
+
+### 구현 위치
+
+| 클래스 | 역할 |
+|---|---|
+| `global/ai/FishClassifyClient`(+`Impl`) | `POST /predict` multipart 호출·재시도·에러 매핑 |
+| `global/ai/dto/PredictResponse`·`PredictionItem` | 모델 응답(성공/실패 공용) |
+| `global/ai/AiErrorCode` | `AI001~AI008` — 모델 `error` 코드 ↔ 우리 에러 코드 매핑 |
+| `global/config/RestClientConfig#fishClassifyRestClient` | connect 1s / read 5s 타임아웃 **재사용 빈** |
+
+### 계약
+
+**`POST /predict`** — `multipart/form-data`, 필드명 **`file`**
+
+```jsonc
+// 성공
+{
+  "success": true, "uncertain": false, "model_version": "b0-384-20260818",
+  "predictions": [
+    {"rank": 1, "species": "붕어",   "confidence": 0.83},
+    {"rank": 2, "species": "잉어",   "confidence": 0.05},
+    {"rank": 3, "species": "가물치", "confidence": 0.01}
+  ],
+  "other_confidence": 0.01, "top1_confidence": 0.83, "latency_ms": 81.2
+}
+// 실패
+{"success": false, "error": "<코드>", "detail": "..."}
+```
+
+| 상황 | 모델 HTTP | 모델 `error` | → 우리 코드 |
+|---|---|---|---|
+| 빈 파일 | 400 | `EMPTY_FILE` | `AI001(400)` |
+| (이미지 아님 — 백엔드 선검증) | — | — | `AI002(400)` |
+| 손상·비이미지 | 400 | `IMAGE_DECODE_FAILED` | `AI003(400)` |
+| 미지원 포맷 | 415 | `UNSUPPORTED_FORMAT` | `AI004(415)` |
+| 용량 초과 | 413 | `FILE_TOO_LARGE` | `AI005(413)` |
+| 화소 5천만 초과 | 413 | `IMAGE_TOO_LARGE` | `AI006(413)` |
+| 모델 미로드 | 503 | `MODEL_NOT_LOADED` | `AI007(503)` |
+| 연결 불가·타임아웃·모르는 코드 | — | — | `AI008(503)` |
+
+그 외: `GET /health` → `{"status":"ok","model_version":"...","num_classes":25,...}` (미로드 시 503), `GET /labels` → 25종 목록과 학명·서식지.
+
+### 반드시 지킬 것 ⚠️
+
+1. **원본 바이트 그대로 전달한다 — 리사이즈·재인코딩 금지.** 모델 서버는 학습과 비트 단위로 같은 전처리를 하도록 맞춰져 있어서, 앞단에서 JPEG를 다시 구우면 **정확도가 조용히 떨어진다**. 크기 제한이 필요하면 리사이즈가 아니라 **거부**로 처리한다(`AI005`).
+2. **`RestClient`는 빈으로 만들어 재사용한다.** 요청마다 새로 만들면 처리량이 **15건/초 → 3.4건/초**로 떨어지는 것이 실측됐다.
+
+### 재시도 정책 ✅
+
+- **4xx는 재시도하지 않는다.** 입력이 잘못된 것이라 다시 보내도 같은 답이다 → 모델의 `error`를 `AiErrorCode`로 옮겨 사용자에게 이유를 알린다.
+- **5xx·타임아웃·네트워크 오류만 1회 재시도**한다(모델 평균 응답 80ms, read timeout 5s라 재시도 비용이 낮다). 최종 실패는 예외가 아니라 `Optional.empty()`로 돌려 호출부가 "직접 선택" 대안 경로로 안내하게 한다.
+
+### 종명 = 두 시스템의 조인 키 ✅ (대조 완료)
+
+모델이 주는 `species` 문자열과 `fishes.name`이 **정확히 일치**해야 도감 매핑이 성공한다. 표기 차이(우럭/조피볼락, 광어/넙치, 배스/큰입배스)가 있으면 조용히 실패한다.
+
+- **대조 결과(현재): 모델 24종 ↔ `data/fish/fish_content_seed.json` 24종 — 문자열까지 완전 일치, 불일치 0건.**
+- 모델 24종: 감성돔, 농어, 돌돔, 벵에돔, 우럭, 참돔, 광어, 볼락, 갈치, 고등어, 삼치, 방어, 전갱이, 숭어, 붕어, 잉어, 쏘가리, 배스, 블루길, 가물치, 메기, 송어, 피라미, 동자개
+- 매핑 실패 시 그 후보는 **WARN 로그와 함께 제외**된다(선택 불가능한 후보를 내려보내지 않기 위해). **모델을 재학습해 클래스가 바뀌면 이 표와 시드를 함께 갱신할 것.**
+
+### 정확도와 UX 제약 ⚠️
+
+- Top-3 **90.7%** / Top-1 **81%**. 사용자가 Top-3에서 고르는 구조라 이 수치로 충분하다. → **Top-1 자동 확정 금지**(`docs/spec.md` 참고).
+- **24종 밖 어종(향어·학꽁치 등)은 Top-3에 정답이 아예 없다.** "목록에서 직접 선택" 대안 경로가 **반드시** 필요하다.
+- `confidence`는 보정 전 원값이라 과신 경향이 있다. 서버는 원값 + `rank`를 그대로 내려주고 표시 방식은 클라이언트가 정한다.
+
+### 연동 확인
+
+```bash
+MODEL_EC2_HOST=$(grep external.fish-classify.base-url src/main/resources/application-prod.properties | sed "s|.*//||")
+curl -s http://${MODEL_EC2_HOST}/health
+curl -s -F "file=@fish.jpg" http://${MODEL_EC2_HOST}/predict
+```
+
+`/health`가 200이면 통신은 끝이다. 깨진 파일을 보내도 **4xx + JSON**이 오면 정상이다(500이 오면 안 된다).
+
+### 미결정 항목 📋
+
+- [ ] 24종 밖 어종을 잡았을 때의 앱 UX("직접 선택" 화면 소유 주체)
+- [ ] `confidence`를 사용자에게 %로 노출할지 — 노출한다면 temperature scaling 보정이 먼저다
+- [ ] 사용자 확정 결과 로깅(모델 Top-1 ≠ 사용자 확정 사례가 재학습에 가장 값지다). 수집 동의·개인정보 처리방침 필요
+
 ## 2. 관광 정보 — TourAPI (한국관광공사 등)
 - 용도: 낚시 스팟 **주변 관광/편의 시설** 정보 (`docs/product.md`의 Tour 도메인).
 - 확정 필요: 사용할 오퍼레이션(위치기반 관광정보 등), 카테고리 매핑, **응답 캐싱/DB 저장 여부**(매 요청 호출 vs 주기적 수집).

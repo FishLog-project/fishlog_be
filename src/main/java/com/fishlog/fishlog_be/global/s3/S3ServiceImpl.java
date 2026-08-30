@@ -18,7 +18,6 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 @RequiredArgsConstructor
 public class S3ServiceImpl implements S3Service {
 
-  private static final long MAX_SIZE = 5 * 1024 * 1024; // 5MB
   private static final String HOST_MARKER = ".amazonaws.com/";
 
   private final S3Client s3Client;
@@ -65,7 +64,7 @@ public class S3ServiceImpl implements S3Service {
     if (file == null || file.isEmpty()) {
       throw new CustomException(S3ErrorCode.EMPTY_FILE);
     }
-    if (file.getSize() > MAX_SIZE) {
+    if (file.getSize() > S3Service.MAX_IMAGE_SIZE) {
       throw new CustomException(S3ErrorCode.FILE_SIZE_EXCEEDED);
     }
     String contentType = file.getContentType();

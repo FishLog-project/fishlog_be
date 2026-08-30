@@ -18,6 +18,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -58,6 +59,16 @@ public class GlobalExceptionHandler {
   public ResponseEntity<BaseResponse<Object>> handleBadRequestParam(Exception ex) {
     log.warn("요청 파라미터 오류: {}", ex.getMessage());
     return ResponseEntity.badRequest().body(BaseResponse.error(400, "요청 파라미터가 올바르지 않습니다."));
+  }
+
+  // 업로드 용량이 spring.servlet.multipart.max-file-size 를 넘으면 컨테이너가 요청을 끊어
+  // 컨트롤러/검증 로직에 아예 닿지 못한다. 잡지 않으면 fallback 이 500 을 내보내므로 413 으로 명시한다.
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ResponseEntity<BaseResponse<Object>> handleMaxUploadSize(
+      MaxUploadSizeExceededException ex) {
+    log.warn("업로드 용량 초과: {}", ex.getMessage());
+    return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+        .body(BaseResponse.error(413, "사진 크기는 5MB 이하여야 합니다."));
   }
 
   @ExceptionHandler(TooManyRequestsException.class)
