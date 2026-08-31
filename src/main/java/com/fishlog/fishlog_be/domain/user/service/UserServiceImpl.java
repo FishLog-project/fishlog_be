@@ -1,6 +1,7 @@
 package com.fishlog.fishlog_be.domain.user.service;
 
 import com.fishlog.fishlog_be.domain.collection.service.CollectionService;
+import com.fishlog.fishlog_be.domain.favorite.service.FavoriteService;
 import com.fishlog.fishlog_be.domain.user.dto.MyProfileResponse;
 import com.fishlog.fishlog_be.domain.user.entity.User;
 import com.fishlog.fishlog_be.domain.user.exception.UserErrorCode;
@@ -28,8 +29,9 @@ public class UserServiceImpl implements UserService {
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
   private final StringRedisTemplate redis;
-  // 도메인 경계: collection 의 repository·entity 직접 접근 대신 service 인터페이스로만 호출.
+  // 도메인 경계: collection·favorite 의 repository·entity 직접 접근 대신 service 인터페이스로만 호출.
   private final CollectionService collectionService;
+  private final FavoriteService favoriteService;
   private final S3Service s3Service;
 
   @Override
@@ -95,6 +97,7 @@ public class UserServiceImpl implements UserService {
       throw new CustomException(UserErrorCode.INVALID_CURRENT_PASSWORD);
     }
     collectionService.deleteMyRecords(userId); // 도감 인증기록 삭제(랭킹 유령 방지)
+    favoriteService.deleteMyFavorites(userId); // 찜 삭제
     userRepository.delete(user); // 사용자 하드 삭제
     redis.delete(REFRESH_KEY + userId); // refresh 무효화
   }

@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.domain.spot.service;
 
+import com.fishlog.fishlog_be.domain.favorite.service.FavoriteService;
 import com.fishlog.fishlog_be.domain.spot.dto.ForecastResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.InlandDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
@@ -19,6 +20,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,13 +45,21 @@ public class SpotServiceImpl implements SpotService {
   private final SpotRepository spotRepository;
   private final MajorFishRepository majorFishRepository;
   private final InlandSpotDetailRepository inlandSpotDetailRepository;
-  // 도메인 경계: 예보 외부연동은 global 서비스 인터페이스로만 접근.
+  // 도메인 경계: 예보 외부연동·찜은 각 service 인터페이스로만 접근.
   private final ForecastService forecastService;
+  private final FavoriteService favoriteService;
 
-  /** 스팟이 소규모(98개)라 전체 반환으로 충분하다. 영역(bbox)·반경 검색은 규모가 커지면 도입. → docs/geo.md */
+  /**
+   * 스팟이 소규모(98개)라 전체 반환으로 충분하다. 영역(bbox)·반경 검색은 규모가 커지면 도입. → docs/geo.md
+   *
+   * <p>각 스팟에 로그인 사용자의 찜 여부(isFavorite)를 병합한다(찜한 spotId 집합 1쿼리 + 메모리 매핑, N+1 없음).
+   */
   @Override
-  public List<SpotResponse> getSpots() {
-    return spotRepository.findAll().stream().map(SpotResponse::from).toList();
+  public List<SpotResponse> getSpots(Long userId) {
+    Set<Long> favoriteSpotIds = favoriteService.getFavoriteSpotIds(userId);
+    return spotRepository.findAll().stream()
+        .map(spot -> SpotResponse.of(spot, favoriteSpotIds.contains(spot.getId())))
+        .toList();
   }
 
   @Override
