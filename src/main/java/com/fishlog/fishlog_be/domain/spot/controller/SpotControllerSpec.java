@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 
@@ -19,14 +20,19 @@ public interface SpotControllerSpec {
 
   @Operation(
       summary = "낚시 스팟 목록",
+      security = @SecurityRequirement(name = "JWT"),
       description =
           """
           ### 설명
-          - 지도 마커용 낚시 스팟 목록(id·name·lat·lot)을 전체 반환합니다.
-          - 프론트(카카오맵)가 이 좌표로 마커를 표시합니다.
+          - 지도 마커용 낚시 스팟 목록(id·name·lat·lot·category)을 전체 반환합니다.
+          - 각 항목에 **로그인 사용자의 찜 여부(`isFavorite`)** 를 포함합니다.
+          - 프론트(카카오맵)가 이 좌표로 마커를 표시하고, `isFavorite`로 찜 별표를 표시합니다.
 
           ### 제약조건
-          - 없음(공개 API).
+          - **보호 API** — `Authorization: Bearer {accessToken}` 필요(찜 여부 계산을 위해).
+
+          ### ⚠ 예외상황
+          - `401`: 인증 토큰 없음/무효
           """)
   @ApiResponses({
     @ApiResponse(
@@ -44,12 +50,12 @@ public interface SpotControllerSpec {
                               "code": 200,
                               "message": "요청이 성공적으로 처리되었습니다.",
                               "data": [
-                                { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805, "category": "해양" }
+                                { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805, "category": "해양", "isFavorite": true }
                               ]
                             }
                             """)))
   })
-  BaseResponse<List<SpotResponse>> getSpots();
+  BaseResponse<List<SpotResponse>> getSpots(@Parameter(hidden = true) Long userId);
 
   @Operation(
       summary = "낚시 스팟 상세",

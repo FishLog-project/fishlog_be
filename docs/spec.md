@@ -22,8 +22,10 @@
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | POST | `/api/users/me/profile-image` | 프로필 이미지 업로드/변경(multipart, S3) | 보호 |
-| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`(해양/내륙)) | 공개 |
+| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`·`isFavorite`(찜 여부)) | 보호 |
 | ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **해양: 실시간 예보 / 내륙: 하천 제원(하폭·유수폭·수심)** | 공개 |
+| ✅ | POST | `/api/spots/{spotId}/favorite` | 스팟 찜 추가(idempotent) | 보호 |
+| ✅ | DELETE | `/api/spots/{spotId}/favorite` | 스팟 찜 해제(idempotent) | 보호 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | ✅ | POST | `/api/collections/classify` | 사진으로 어종 후보(Top-3) 분류. **저장 없음(순수 조회)** → `docs/external.md` §2 | 보호 |
@@ -188,6 +190,27 @@
 - 사용자 미존재 `404 USER_NOT_FOUND`, 미인증 `401`.
 
 ### 낚시 스팟 (`/api/spots`) ✅
+
+#### `GET /api/spots` — 스팟 목록 ✅ (보호)
+
+지도 마커용 전체 스팟(좌표·분류) + **로그인 사용자의 찜 여부(`isFavorite`)**. 찜 여부 계산을 위해 **보호 API**(`Authorization: Bearer` 필요)다. 찜한 spotId 집합을 1쿼리로 조회해 메모리 병합(N+1 없음).
+```jsonc
+// Response(data)
+[
+  { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805, "category": "해양", "isFavorite": true },
+  { "id": 2, "name": "갈곡천", "lat": 35.51816, "lot": 126.6797,  "category": "내륙", "isFavorite": false }
+]
+```
+- 미인증 `401`.
+
+#### `POST /api/spots/{spotId}/favorite` — 찜 추가 ✅ / `DELETE …/favorite` — 찜 해제 ✅ (보호)
+```jsonc
+// Request: 본문 없음 (경로변수 spotId)
+// Response: data: null
+```
+- 둘 다 **idempotent**: 추가는 이미 찜이면 no-op 성공, 해제는 찜 아니어도 성공. 응답 `data:null`.
+- 없는 스팟 추가 → `404 SPOT_NOT_FOUND`. 미인증 `401`.
+- 찜 = `favorite` 테이블 `(user_id, spot_id)` 1행(중복 불가) → ERD 참고.
 
 #### `GET /api/spots/{id}` — 스팟 상세 ✅
 
@@ -624,6 +647,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit`, `category`(ENUM 해양/내륙) |
+| `favorite` | 스팟 찜(사용자↔스팟 N:M) | `id`, `user_id`(plain Long), `spot_id`(plain Long), **UNIQUE(user_id, spot_id)**, `created_at`(찜 시각) |
 | `inland_spot_detail` | 내륙(담수) 스팟의 하천 제원 — `spots`와 **1:1** | `spot_id`(PK=FK), `river_width_min/max`(하폭), `flow_width_min/max`(유수폭), `depth_min/max`(수심). 단위 m, 각 값 nullable |
 
 ### users (사용자) — 엔티티 ✅ / 가입 흐름 📋
@@ -674,8 +698,25 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - `spots`를 참조하므로 스팟 삭제 전에 이 행을 먼저 지운다(`SpotSeedLoader`의 정리 단계).
 - `ddl-auto=update`가 테이블을 자동 생성하므로 **수동 DDL이 필요 없다**(`is_collectible` 제거 때와 달리 추가만 하는 변경).
 
+### favorite (스팟 찜) ✅
+사용자↔스팟 N:M을 푸는 조인 테이블. "1회 찜 = 1행, 중복 불가".
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | BIGINT | PK, auto | 찜 식별자 |
+| `user_id` | BIGINT | NOT NULL | 찜한 사용자(`users.id` 참조, plain Long — FK 미승격) |
+| `spot_id` | BIGINT | NOT NULL | 찜한 스팟(`spots.id` 참조, plain Long — FK 미승격) |
+| `created_at`/`modified_at` | DATETIME | | `BaseTimeEntity`(createdAt=찜한 시각) |
+
+- **UNIQUE(user_id, spot_id)**(`uk_favorite_user_spot`) — 같은 사용자가 같은 스팟을 중복 찜 불가. "찜함" = 행 존재 여부.
+- `catch_record`와 동일하게 `user_id`·`spot_id`는 **plain Long**(FK 미승격 → `docs/auth-followup.md`). 스팟 존재 검증은 애플리케이션(`spotRepository.existsById`)이 담당.
+- 회원탈퇴 시 `deleteByUserId`로 함께 삭제(`UserServiceImpl.withdraw`가 `FavoriteService` 경유 호출).
+- `ddl-auto=update` 자동 생성 → 수동 DDL 불필요.
+
 ```
 User(users) 1 ──< catch_record >── 1 Fish(fishes)   # 사용자 도감(어종 인증 1건=1행)
 Spot(spots) 1 ──< major_fish >── 1 Fish(fishes)     # 스팟-어종 매핑
+User(users) 1 ──< favorite >── 1 Spot(spots)        # 스팟 찜(N:M, (user_id,spot_id) UNIQUE)
+# favorite/catch_record 의 user_id·spot_id 는 plain Long(FK 미승격 → docs/auth-followup.md)
 # (spot_id 로 "어느 스팟에서 인증했는지"는 추후 catch_record 에 추가 — 현재 미포함)
 ```
