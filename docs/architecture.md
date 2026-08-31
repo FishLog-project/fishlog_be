@@ -40,10 +40,15 @@ com.fishlog.fishlog_be
 │  │  ├─ entity/CatchRecord.java
 │  │  ├─ exception/CollectionErrorCode.java            # C001~C002 (크기 검증)
 │  │  └─ repository/CatchRecordRepository.java · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
-│  └─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
-│     ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
-│     ├─ service/RankingService.java · RankingServiceImpl.java
-│     └─ dto/RankingResponse.java · RankingEntryResponse.java · RankingType.java
+│  ├─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
+│  │  ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
+│  │  ├─ service/RankingService.java · RankingServiceImpl.java
+│  │  └─ dto/RankingResponse.java · RankingEntryResponse.java · RankingType.java
+│  └─ favorite                   # 스팟 찜(사용자↔스팟 N:M, favorite 테이블)
+│     ├─ controller/FavoriteController.java (+Spec)  # POST/DELETE /api/spots/{spotId}/favorite (보호)
+│     ├─ service/FavoriteService.java · FavoriteServiceImpl.java  # 추가·해제·찜 spotId 집합·탈퇴 정리
+│     ├─ entity/Favorite.java  repository/FavoriteRepository.java  # UNIQUE(user_id, spot_id)
+│     └─ (예외 없음 — 스팟 미존재는 SpotErrorCode.SPOT_NOT_FOUND 재사용)
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
@@ -108,10 +113,11 @@ domain
 │  ├─ entity/User.java                    ✅ (권한 Role은 추후 도입 예정 — 현재 미포함)
 │  ├─ dto/UserProfileResponse.java        📋
 │  └─ exception/UserErrorCode.java        📋
-├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록만
+├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록·상세
 ├─ fish                     # 어종 정보                                      ✅
 ├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드
 ├─ ranking                  # 사용자 랭킹 (→ docs/ranking.md)                 ✅
+├─ favorite                 # 스팟 찜 (사용자↔스팟 N:M)                       ✅
 └─ tour                     # 주변 관광 시설 (외부 연동 → docs/external.md)     📋
 ```
 
