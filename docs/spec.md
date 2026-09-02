@@ -633,12 +633,14 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ## 데이터 모델 (ERD)
 
-> **⚠️ 초안 v0.4 — 수정 가능성 있음.** 아래 이미지가 현재 draft이며, 컬럼·관계는 도메인 구현과 함께 확정됩니다.
+> **v0.5 — 현재 구현된 스키마 기준.** 아래 이미지는 구현 완료된 **7개 테이블**을 반영합니다. 관광(tour) 등 미구현 도메인이 추가되면 함께 갱신합니다.
 > 모든 엔티티는 `BaseTimeEntity`를 상속해 `createdAt`/`modifiedAt`을 가집니다(ERD에는 편의상 미표기, `@SuperBuilder` 사용 → `docs/conventions.md`).
+>
+> **v0.4 → v0.5 변경:** 구 `user_dex` 제거(`catch_record`로 대체 완료) · `favorite`(스팟 찜) 추가 · `catch_record`·`inland_spot_detail` 논리명 반영.
 
-![img.png](erd-v0.4.png)
+![img.png](erd_v0.5.png)
 
-### 엔티티 요약 (이미지 기준 v0.4)
+### 엔티티 요약 (이미지 기준 v0.5)
 
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
@@ -666,7 +668,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - **권한(`role`) 컬럼은 현재 미포함** — 전원 일반 사용자다. 관리자(`ADMIN`) 기능이 필요해지는 시점에 `role` 컬럼을 추가한다(그때 `security.md` 인가 정책과 함께 확정).
 
 ### spots (낚시 스팟) 🚧
-바다낚시지수 API(15142486)에서 **불변 정보만** 추출해 시드 저장 → `docs/external.md` §1, `docs/geo.md`. (컬럼명은 ERD v0.4 기준)
+바다낚시지수 API(15142486)에서 **불변 정보만** 추출해 시드 저장 → `docs/external.md` §1, `docs/geo.md`. (컬럼명은 ERD v0.5 기준)
 
 | 컬럼 | 타입 | 제약 | 설명 | 출처 |
 |---|---|---|---|---|
