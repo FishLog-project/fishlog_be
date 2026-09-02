@@ -6,6 +6,7 @@ import com.fishlog.fishlog_be.domain.spot.service.SpotService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,8 +22,8 @@ public class SpotController implements SpotControllerSpec {
 
   @Override
   @GetMapping
-  public BaseResponse<List<SpotResponse>> getSpots() {
-    return BaseResponse.success(spotService.getSpots());
+  public BaseResponse<List<SpotResponse>> getSpots(@AuthenticationPrincipal Long userId) {
+    return BaseResponse.success(spotService.getSpots(userId));
   }
 
   @Override

@@ -22,11 +22,14 @@
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | POST | `/api/users/me/profile-image` | 프로필 이미지 업로드/변경(multipart, S3) | 보호 |
-| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`(해양/내륙)) | 공개 |
+| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`·`isFavorite`(찜 여부)) | 보호 |
 | ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **해양: 실시간 예보 / 내륙: 하천 제원(하폭·유수폭·수심)** | 공개 |
+| ✅ | POST | `/api/spots/{spotId}/favorite` | 스팟 찜 추가(idempotent) | 보호 |
+| ✅ | DELETE | `/api/spots/{spotId}/favorite` | 스팟 찜 해제(idempotent) | 보호 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
-| 📋 | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) | 보호 |
+| ✅ | POST | `/api/collections/classify` | 사진으로 어종 후보(Top-3) 분류. **저장 없음(순수 조회)** → `docs/external.md` §2 | 보호 |
+| ✅ | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) + 도감 기록 | 보호 |
 | ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
 | ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 | ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
@@ -187,6 +190,27 @@
 - 사용자 미존재 `404 USER_NOT_FOUND`, 미인증 `401`.
 
 ### 낚시 스팟 (`/api/spots`) ✅
+
+#### `GET /api/spots` — 스팟 목록 ✅ (보호)
+
+지도 마커용 전체 스팟(좌표·분류) + **로그인 사용자의 찜 여부(`isFavorite`)**. 찜 여부 계산을 위해 **보호 API**(`Authorization: Bearer` 필요)다. 찜한 spotId 집합을 1쿼리로 조회해 메모리 병합(N+1 없음).
+```jsonc
+// Response(data)
+[
+  { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805, "category": "해양", "isFavorite": true },
+  { "id": 2, "name": "갈곡천", "lat": 35.51816, "lot": 126.6797,  "category": "내륙", "isFavorite": false }
+]
+```
+- 미인증 `401`.
+
+#### `POST /api/spots/{spotId}/favorite` — 찜 추가 ✅ / `DELETE …/favorite` — 찜 해제 ✅ (보호)
+```jsonc
+// Request: 본문 없음 (경로변수 spotId)
+// Response: data: null
+```
+- 둘 다 **idempotent**: 추가는 이미 찜이면 no-op 성공, 해제는 찜 아니어도 성공. 응답 `data:null`.
+- 없는 스팟 추가 → `404 SPOT_NOT_FOUND`. 미인증 `401`.
+- 찜 = `favorite` 테이블 `(user_id, spot_id)` 1행(중복 불가) → ERD 참고.
 
 #### `GET /api/spots/{id}` — 스팟 상세 ✅
 
@@ -507,7 +531,81 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 ```
 
 > ✅ **신원 전환 완료:** 과도기의 `userId` 쿼리 파라미터는 제거됐고 `@AuthenticationPrincipal`로 로그인 사용자에서 신원을 얻는다. 경로는 팀 결정으로 현행 유지(`/me` 리네임 미채택) → `docs/auth-followup.md` §2.
-> ⚠️ **쓰기(POST) 미구현:** 인증 사진을 저장하는 API가 아직 없어, 로컬에서는 `catch_record`에 수동 INSERT(또는 시드)해야 결과가 보인다. `size` NOT NULL 유의.
+> ✅ **쓰기(POST) 구현 완료:** `POST /api/collections/verify`로 인증 기록을 생성한다(아래). 수동 INSERT는 더 이상 필요 없다.
+
+### 어종 인증 흐름 — 분류(AI) → 확정(저장) ✅ (보호)
+
+사진 1장으로 도감을 채우는 흐름은 **두 번의 호출**로 나뉜다.
+
+```
+① POST /api/collections/classify   사진 → 어종 후보 Top-3        (저장 없음)
+        ↓  사용자가 후보 중 하나를 고름 (또는 목록에서 직접 선택)
+② POST /api/collections/verify     사진 + fishId + size → 도감 기록 (S3 + DB)
+```
+
+**왜 나눴나 ✅(확정):** 모델 Top-1 정확도는 **81%**, Top-3는 **90.7%** 다. 자동 확정하면 5건 중 1건꼴로 잘못된 어종이 도감에 박히고, 사용자가 되돌릴 방법이 없다. **어종을 정하는 주체는 모델이 아니라 사용자**이며, 모델은 후보를 좁혀 주는 역할만 한다.
+
+이 분리에서 따라오는 성질:
+
+- **모델 서버가 죽어도 인증은 된다.** `verify`는 모델을 호출하지 않는다 → 장애 시 클라이언트는 `classify`를 건너뛰고 도감 목록에서 직접 골라 인증하면 된다.
+- **24종 밖 어종(향어·학꽁치 등)도 인증할 수 있다.** 모델 후보에 정답이 없을 뿐, `verify`는 도감의 어떤 어종이든 받는다. → 클라이언트는 "목록에서 직접 선택" 경로를 **항상** 제공해야 한다.
+- **고아 S3 객체가 생기지 않는다.** `classify`는 아무것도 저장하지 않고, `verify`만 업로드한다. 대신 사진을 두 번 전송한다(모바일 대역폭과 맞바꾼 선택).
+
+#### ① `POST /api/collections/classify` — 어종 후보 분류 ✅ (보호)
+
+`multipart/form-data`로 `image` 파트에 사진을 담아 전송. 모델 서버(`docs/external.md` §2)에 **원본 바이트 그대로** 넘겨 Top-3 후보를 받고, 종명을 `fishes.name`으로 매핑해 `fishId`를 채워 반환한다.
+
+```jsonc
+// Request: multipart/form-data
+//   image: (이미지 파일, 최대 5MB)
+
+// Response(data)
+{
+  "modelVersion": "b0-384-20260818",
+  "uncertain": false,
+  "guide": "후보 중에서 잡은 어종을 선택해주세요. 목록에 없으면 직접 선택할 수 있어요.",
+  "candidates": [
+    { "rank": 1, "fishId": 15, "name": "붕어",   "imageUrl": null, "confidence": 0.83 },
+    { "rank": 2, "fishId": 16, "name": "잉어",   "imageUrl": null, "confidence": 0.05 },
+    { "rank": 3, "fishId": 20, "name": "가물치", "imageUrl": null, "confidence": 0.01 }
+  ]
+}
+```
+
+- **`uncertain: true`여도 후보는 그대로 내려준다 ✅(확정).** 모델이 확신하지 못한다는 뜻이지 후보가 틀렸다는 뜻이 아니다. UI는 후보를 숨기지 말고 `guide`의 재촬영 안내만 덧붙인다.
+- **`candidates`는 전부 선택 가능하다.** 도감에 없는 종명은 서버가 WARN 로그와 함께 제외하므로 `fishId`가 null인 항목은 내려오지 않는다(현재 모델 24종 ↔ 도감 24종은 문자열까지 일치 — `docs/external.md` §2의 조인 키 참고).
+- **`confidence`는 25클래스 softmax 원값 ✅(확정 — 원값 노출).** 후보들의 합이 1이 아니며 보정(temperature scaling) 전이라 과신 경향이 있다. 서버는 값을 가공하지 않고 `rank`와 함께 그대로 내려주며, **%로 표시할지는 클라이언트가 결정**한다(서버 재배포 없이 UX를 바꿀 수 있게 하기 위함).
+- 오류: 사진 문제 `AI001~AI006`(400/413/415), 모델 미로드 `AI007(503)`, 모델 서버 연결 불가 `AI008(503)`.
+
+#### ② `POST /api/collections/verify` — 어종 인증(도감 기록) ✅ (보호)
+
+`multipart/form-data`로 `image`(사진) + `fishId`(확정 어종) + `size`(cm)를 전송. S3 `fish/` 경로에 업로드하고 `catch_record` 1행을 생성한다.
+
+```jsonc
+// Request: multipart/form-data
+//   image:  (이미지 파일, 최대 5MB)
+//   fishId: 15
+//   size:   27.5
+
+// Response(data)
+{
+  "catchRecordId": 42,
+  "fishId": 15,
+  "fishName": "붕어",
+  "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
+  "size": 27.5,
+  "firstCatch": true,   // 이 어종을 처음 잡음 → 도감 새 칸 획득 연출
+  "catchCount": 1       // 이번 인증 포함 총 횟수
+}
+```
+
+- 사용자 신원은 토큰에서 얻는다(`userId` 파라미터 없음).
+- `size`는 **필수**이며 `0 < size <= 300`(cm). 크기 랭킹(`GET /api/rankings/size`)의 기준값이라 NOT NULL이고, 상한은 오타·장난 입력이 랭킹을 장악하는 것을 막는 가드다.
+- `firstCatch`·`catchCount`는 저장된 컬럼이 아니라 (user, fish) 행 **집계에서 파생**한다(옵션 B).
+- **업로드 후 DB 저장이 실패하면 S3 객체를 보상 삭제**한다(고아 객체 방지). 저장은 `saveAndFlush`로 제약 위반을 커밋 전에 드러낸다.
+- 오류: 크기 이상 `C001·C002(400)`, 어종 미존재 `F001(404)`, 사진 문제 `S001~S003(400)`, 업로드 실패 `S004(500)`, 용량 초과 `413`.
+
+> **이미지 크기 한도는 5MB 한 곳에서 관리된다 ✅.** `S3Service.MAX_IMAGE_SIZE`를 분류 경로도 함께 쓰므로 "분류는 성공했는데 저장이 실패"하는 흐름이 없다. 컨테이너 한도(`spring.servlet.multipart.max-file-size=10MB`)는 그보다 느슨하게 둬서, 초과분이 500이 아니라 **413 + 명확한 메시지**로 나가게 한다.
 
 ### `GET /api/collections/dex` — 내 도감 그리드 ✅ (보호)
 
@@ -535,12 +633,14 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ## 데이터 모델 (ERD)
 
-> **⚠️ 초안 v0.4 — 수정 가능성 있음.** 아래 이미지가 현재 draft이며, 컬럼·관계는 도메인 구현과 함께 확정됩니다.
+> **v0.5 — 현재 구현된 스키마 기준.** 아래 이미지는 구현 완료된 **7개 테이블**을 반영합니다. 관광(tour) 등 미구현 도메인이 추가되면 함께 갱신합니다.
 > 모든 엔티티는 `BaseTimeEntity`를 상속해 `createdAt`/`modifiedAt`을 가집니다(ERD에는 편의상 미표기, `@SuperBuilder` 사용 → `docs/conventions.md`).
+>
+> **v0.4 → v0.5 변경:** 구 `user_dex` 제거(`catch_record`로 대체 완료) · `favorite`(스팟 찜) 추가 · `catch_record`·`inland_spot_detail` 논리명 반영.
 
-![img.png](erd-v0.4.png)
+![img.png](erd_v0.5.png)
 
-### 엔티티 요약 (이미지 기준 v0.4)
+### 엔티티 요약 (이미지 기준 v0.5)
 
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
@@ -549,6 +649,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit`, `category`(ENUM 해양/내륙) |
+| `favorite` | 스팟 찜(사용자↔스팟 N:M) | `id`, `user_id`(plain Long), `spot_id`(plain Long), **UNIQUE(user_id, spot_id)**, `created_at`(찜 시각) |
 | `inland_spot_detail` | 내륙(담수) 스팟의 하천 제원 — `spots`와 **1:1** | `spot_id`(PK=FK), `river_width_min/max`(하폭), `flow_width_min/max`(유수폭), `depth_min/max`(수심). 단위 m, 각 값 nullable |
 
 ### users (사용자) — 엔티티 ✅ / 가입 흐름 📋
@@ -567,7 +668,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - **권한(`role`) 컬럼은 현재 미포함** — 전원 일반 사용자다. 관리자(`ADMIN`) 기능이 필요해지는 시점에 `role` 컬럼을 추가한다(그때 `security.md` 인가 정책과 함께 확정).
 
 ### spots (낚시 스팟) 🚧
-바다낚시지수 API(15142486)에서 **불변 정보만** 추출해 시드 저장 → `docs/external.md` §1, `docs/geo.md`. (컬럼명은 ERD v0.4 기준)
+바다낚시지수 API(15142486)에서 **불변 정보만** 추출해 시드 저장 → `docs/external.md` §1, `docs/geo.md`. (컬럼명은 ERD v0.5 기준)
 
 | 컬럼 | 타입 | 제약 | 설명 | 출처 |
 |---|---|---|---|---|
@@ -599,8 +700,25 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - `spots`를 참조하므로 스팟 삭제 전에 이 행을 먼저 지운다(`SpotSeedLoader`의 정리 단계).
 - `ddl-auto=update`가 테이블을 자동 생성하므로 **수동 DDL이 필요 없다**(`is_collectible` 제거 때와 달리 추가만 하는 변경).
 
+### favorite (스팟 찜) ✅
+사용자↔스팟 N:M을 푸는 조인 테이블. "1회 찜 = 1행, 중복 불가".
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | BIGINT | PK, auto | 찜 식별자 |
+| `user_id` | BIGINT | NOT NULL | 찜한 사용자(`users.id` 참조, plain Long — FK 미승격) |
+| `spot_id` | BIGINT | NOT NULL | 찜한 스팟(`spots.id` 참조, plain Long — FK 미승격) |
+| `created_at`/`modified_at` | DATETIME | | `BaseTimeEntity`(createdAt=찜한 시각) |
+
+- **UNIQUE(user_id, spot_id)**(`uk_favorite_user_spot`) — 같은 사용자가 같은 스팟을 중복 찜 불가. "찜함" = 행 존재 여부.
+- `catch_record`와 동일하게 `user_id`·`spot_id`는 **plain Long**(FK 미승격 → `docs/auth-followup.md`). 스팟 존재 검증은 애플리케이션(`spotRepository.existsById`)이 담당.
+- 회원탈퇴 시 `deleteByUserId`로 함께 삭제(`UserServiceImpl.withdraw`가 `FavoriteService` 경유 호출).
+- `ddl-auto=update` 자동 생성 → 수동 DDL 불필요.
+
 ```
 User(users) 1 ──< catch_record >── 1 Fish(fishes)   # 사용자 도감(어종 인증 1건=1행)
 Spot(spots) 1 ──< major_fish >── 1 Fish(fishes)     # 스팟-어종 매핑
+User(users) 1 ──< favorite >── 1 Spot(spots)        # 스팟 찜(N:M, (user_id,spot_id) UNIQUE)
+# favorite/catch_record 의 user_id·spot_id 는 plain Long(FK 미승격 → docs/auth-followup.md)
 # (spot_id 로 "어느 스팟에서 인증했는지"는 추후 catch_record 에 추가 — 현재 미포함)
 ```

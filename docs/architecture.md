@@ -1,6 +1,6 @@
 # architecture.md — 패키지 구조·레이어·공통 패턴
 
-> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증·회원가입·로그인)·스팟 목록·어종 전체 도감·사용자 도감 조회·랭킹·시드 적재와 Security/JWT·Redis 인프라가 구현되어 있고, 스팟 상세·어종 인증 사진 업로드(S3) 등 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
+> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증·회원가입·로그인)·스팟 목록/상세·어종 전체 도감·사용자 도감 조회·**AI 어종 분류 및 인증 사진 업로드**·랭킹·시드 적재와 Security/JWT·Redis·S3 인프라가 구현되어 있고, 관광(tour) 연동 등 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
 
 ## 현재 구조 ✅
 
@@ -34,22 +34,29 @@ com.fishlog.fishlog_be
 │  │  ├─ repository/FishRepository.java
 │  │  └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
 │  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행
-│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /api/collections/dex (보호)
+│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex · POST /classify, /verify (모두 보호)
 │  │  ├─ service/CollectionService.java · CollectionServiceImpl.java
-│  │  ├─ dto/CatchRecordResponse.java · MyDexResponse.java · DexEntryResponse.java
+│  │  ├─ dto/CatchRecordResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
 │  │  ├─ entity/CatchRecord.java
+│  │  ├─ exception/CollectionErrorCode.java            # C001~C002 (크기 검증)
 │  │  └─ repository/CatchRecordRepository.java · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
-│  └─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
-│     ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
-│     ├─ service/RankingService.java · RankingServiceImpl.java
-│     └─ dto/RankingResponse.java · RankingEntryResponse.java · RankingType.java
+│  ├─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
+│  │  ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
+│  │  ├─ service/RankingService.java · RankingServiceImpl.java
+│  │  └─ dto/RankingResponse.java · RankingEntryResponse.java · RankingType.java
+│  └─ favorite                   # 스팟 찜(사용자↔스팟 N:M, favorite 테이블)
+│     ├─ controller/FavoriteController.java (+Spec)  # POST/DELETE /api/spots/{spotId}/favorite (보호)
+│     ├─ service/FavoriteService.java · FavoriteServiceImpl.java  # 추가·해제·찜 spotId 집합·탈퇴 정리
+│     ├─ entity/Favorite.java  repository/FavoriteRepository.java  # UNIQUE(user_id, spot_id)
+│     └─ (예외 없음 — 스팟 미존재는 SpotErrorCode.SPOT_NOT_FOUND 재사용)
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
    ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), S3Config(S3Client), SwaggerConfig(JWT 스킴)
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
-   ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName·S3ErrorCode. 프로필 이미지 등 → docs/media.md
+   ├─ ai                                      # 어종 분류 모델 서버 연동 — FishClassifyClient(+Impl)·AiErrorCode(AI001~AI008)·dto/PredictResponse·PredictionItem → docs/external.md §2
+   ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName·S3ErrorCode. 프로필·어종 인증 사진 → docs/media.md
    ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
    ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, InlandDetailSeedLoader, SeedDataReader (+dto) — 스팟/어종/담수 상세 시드 적재
    └─ exception
@@ -106,10 +113,11 @@ domain
 │  ├─ entity/User.java                    ✅ (권한 Role은 추후 도입 예정 — 현재 미포함)
 │  ├─ dto/UserProfileResponse.java        📋
 │  └─ exception/UserErrorCode.java        📋
-├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록만
+├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록·상세
 ├─ fish                     # 어종 정보                                      ✅
-├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회만(업로드 📋)
+├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드
 ├─ ranking                  # 사용자 랭킹 (→ docs/ranking.md)                 ✅
+├─ favorite                 # 스팟 찜 (사용자↔스팟 N:M)                       ✅
 └─ tour                     # 주변 관광 시설 (외부 연동 → docs/external.md)     📋
 ```
 
@@ -221,7 +229,8 @@ public class SpotController implements SpotControllerSpec {
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
-| `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필 이미지 적용 (docs/media.md) | ✅ |
+| `ai` | 어종 분류 모델 서버 연동 — `FishClassifyClient`(+`Impl`)·`AiErrorCode`·`dto/PredictResponse`. multipart 로 원본 바이트 전송, 4xx 무재시도 / 5xx·타임아웃 1회 재시도 → docs/external.md §2 | ✅ |
+| `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필 이미지·어종 인증 사진 적용 (docs/media.md) | ✅ |
 | `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`·`InlandDetailSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
 | `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |
@@ -285,6 +294,7 @@ throw new TooManyRequestsException("잠시 후 다시 시도해주세요.", 30);
 | `MethodArgumentNotValidException` | 400 | `@Valid` 필드 검증 실패, 필드별 메시지 병합 |
 | `HttpMessageNotReadableException` | 400 | 요청 본문 파싱 실패 |
 | `MethodArgumentTypeMismatch` / `MissingServletRequestParameter` | 400 | 파라미터 오류 |
+| `MaxUploadSizeExceededException` | 413 | 업로드 용량이 `spring.servlet.multipart.max-file-size`를 초과(컨테이너가 끊어 컨트롤러에 닿지 못하는 경로) |
 | `TooManyRequestsException` | 429 | `data.retryAfterSec` 포함 |
 | `HttpRequestMethodNotSupportedException` | 405 | 허용되지 않은 메서드 |
 | `NoHandlerFoundException` / `NoResourceFoundException` | 404 | 매핑 없는 경로·정적 리소스 미존재 |

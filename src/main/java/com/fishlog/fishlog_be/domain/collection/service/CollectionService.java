@@ -1,7 +1,10 @@
 package com.fishlog.fishlog_be.domain.collection.service;
 
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.ClassifyResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 /** 사용자 도감(어종 인증) 조회 서비스. */
 public interface CollectionService {
@@ -33,4 +36,32 @@ public interface CollectionService {
    * @param userId 삭제 대상 사용자 id
    */
   void deleteMyRecords(Long userId);
+
+  /**
+   * 사진으로 어종 후보(Top-3)를 분류한다. <b>저장하지 않는 순수 조회</b>다 — S3에도, DB에도 아무것도 쓰지 않는다.
+   *
+   * <p>사용자가 후보 중 하나를 고른 뒤 {@link #verify(Long, Long, Double, MultipartFile)}로 실제 인증을 완료한다. 분류와 저장을
+   * 나눈 이유는 Top-1 정확도가 81%뿐이라 자동 확정이 5건 중 1건꼴로 도감을 오염시키기 때문이다(Top-3는 90.7%).
+   *
+   * @param image 원본 이미지(리사이즈·재인코딩 없이 모델로 전달)
+   * @return 후보 목록. 모델이 확신하지 못해도({@code uncertain}) 후보는 그대로 담긴다
+   * @throws com.fishlog.fishlog_be.global.exception.CustomException 사진 자체가 문제면 {@code AiErrorCode}의
+   *     4xx, 모델 서버에 닿지 못하면 {@code CLASSIFY_UNAVAILABLE}(503)
+   */
+  ClassifyResponse classify(MultipartFile image);
+
+  /**
+   * 어종 인증을 완료해 도감에 기록한다(인증 1건 = {@code catch_record} 1행).
+   *
+   * <p>어종은 <b>모델이 아니라 사용자가 확정</b>한다 — 분류 후보에서 골랐든, 24종 밖 어종이라 목록에서 직접 골랐든 이 메서드는 동일하게 동작한다. 덕분에 모델
+   * 서버가 죽어도 인증 기능 자체는 살아 있다.
+   *
+   * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
+   * @param fishId 사용자가 확정한 어종 id
+   * @param size 잡은 크기(cm, 필수 — 크기 랭킹 기준)
+   * @param image 인증 사진(S3 {@code fish/} 경로에 저장)
+   * @throws com.fishlog.fishlog_be.global.exception.CustomException 어종 미존재 {@code
+   *     FISH_NOT_FOUND}(404), 크기 이상 {@code CollectionErrorCode}(400), 업로드 실패 {@code S3ErrorCode}
+   */
+  VerifyResponse verify(Long userId, Long fishId, Double size, MultipartFile image);
 }
