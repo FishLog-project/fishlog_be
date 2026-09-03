@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.domain.spot.controller;
 
+import com.fishlog.fishlog_be.domain.spot.dto.PopularSpotResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
 import com.fishlog.fishlog_be.domain.spot.service.SpotService;
@@ -27,6 +28,12 @@ public class SpotController implements SpotControllerSpec {
   @GetMapping
   public BaseResponse<List<SpotResponse>> getSpots(@AuthenticationPrincipal Long userId) {
     return BaseResponse.success(spotService.getSpots(userId));
+  }
+
+  @Override
+  @GetMapping("/popular")
+  public BaseResponse<List<PopularSpotResponse>> getPopularSpots() {
+    return BaseResponse.success(spotService.getPopularSpots());
   }
 
   @Override

@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.domain.spot.controller;
 
+import com.fishlog.fishlog_be.domain.spot.dto.PopularSpotResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
@@ -56,6 +57,40 @@ public interface SpotControllerSpec {
                             """)))
   })
   BaseResponse<List<SpotResponse>> getSpots(@Parameter(hidden = true) Long userId);
+
+  @Operation(
+      summary = "추천 낚시 스팟 (조회수 Top 3)",
+      description =
+          """
+          ### 설명
+          - **누적 조회수(검색 후 상세 조회 시에도 조회수 증가) 상위 3개** 스팟을 조회수 내림차순으로 반환합니다.
+          - 홈/배너 등의 "인기 스팟" 노출용. 공개 API(인증 불필요).
+          - 스팟이 3개 미만이면 있는 만큼 반환합니다.
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "조회 성공",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "요청이 성공적으로 처리되었습니다.",
+                              "data": [
+                                { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805, "category": "해양", "viewCount": 128, "majorFishes": ["감성돔", "참돔"] },
+                                { "id": 7, "name": "격포항", "lat": 35.61, "lot": 126.46, "category": "해양", "viewCount": 96, "majorFishes": ["농어", "우럭"] },
+                                { "id": 50, "name": "갈곡천", "lat": 35.51816, "lot": 126.6797, "category": "내륙", "viewCount": 42, "majorFishes": ["붕어", "잉어", "피라미"] }
+                              ]
+                            }
+                            """)))
+  })
+  BaseResponse<List<PopularSpotResponse>> getPopularSpots();
 
   @Operation(
       summary = "낚시 스팟 상세",
