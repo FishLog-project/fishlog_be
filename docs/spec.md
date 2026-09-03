@@ -23,6 +23,7 @@
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | POST | `/api/users/me/profile-image` | 프로필 이미지 업로드/변경(multipart, S3) | 보호 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`·`isFavorite`(찜 여부)) | 보호 |
+| ✅ | GET | `/api/spots/popular` | 인기 스팟(조회수 Top3 — 좌표·`category`·`viewCount`·`majorFishes`) | 공개 |
 | ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **해양: 실시간 예보 / 내륙: 하천 제원(하폭·유수폭·수심)** | 공개 |
 | ✅ | POST | `/api/spots/{spotId}/favorite` | 스팟 찜 추가(idempotent) | 보호 |
 | ✅ | DELETE | `/api/spots/{spotId}/favorite` | 스팟 찜 해제(idempotent) | 보호 |
@@ -211,6 +212,18 @@
 - 둘 다 **idempotent**: 추가는 이미 찜이면 no-op 성공, 해제는 찜 아니어도 성공. 응답 `data:null`.
 - 없는 스팟 추가 → `404 SPOT_NOT_FOUND`. 미인증 `401`.
 - 찜 = `favorite` 테이블 `(user_id, spot_id)` 1행(중복 불가) → ERD 참고.
+
+#### `GET /api/spots/popular` — 인기 스팟(조회수 Top3) ✅ (공개)
+
+누적 조회수(`spots.view_count`) **상위 3개**를 내림차순 반환. 홈/배너의 "인기 스팟" 노출용 공개 API. 각 항목에 좌표·분류·조회수 + **주요 대상 어종(`majorFishes`)** 포함.
+```jsonc
+// Response(data)
+[
+  { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805,
+    "category": "해양", "viewCount": 128, "majorFishes": ["감성돔", "참돔"] }
+]
+```
+- `viewCount` 내림차순. 스팟이 3개 미만이면 있는 만큼 반환.
 
 #### `GET /api/spots/{id}` — 스팟 상세 ✅
 
