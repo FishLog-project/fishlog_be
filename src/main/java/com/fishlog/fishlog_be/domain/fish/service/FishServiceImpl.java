@@ -2,7 +2,9 @@ package com.fishlog.fishlog_be.domain.fish.service;
 
 import com.fishlog.fishlog_be.domain.fish.dto.FishDetailResponse;
 import com.fishlog.fishlog_be.domain.fish.dto.FishListResponse;
+import com.fishlog.fishlog_be.domain.fish.dto.SeasonalFishResponse;
 import com.fishlog.fishlog_be.domain.fish.entity.Fish;
+import com.fishlog.fishlog_be.domain.fish.entity.Season;
 import com.fishlog.fishlog_be.domain.fish.exception.FishErrorCode;
 import com.fishlog.fishlog_be.domain.fish.repository.FishRepository;
 import com.fishlog.fishlog_be.global.exception.CustomException;
@@ -42,5 +44,14 @@ public class FishServiceImpl implements FishService {
     return fishRepository
         .findById(id)
         .orElseThrow(() -> new CustomException(FishErrorCode.FISH_NOT_FOUND));
+  }
+
+  @Override
+  public List<SeasonalFishResponse> getFishInSeason(Season season) {
+    // 어종 수가 적어(도감 규모) 전체를 읽어 계절 플래그로 메모리 필터한다.
+    return fishRepository.findAllByOrderByIdAsc().stream()
+        .filter(season::matches)
+        .map(SeasonalFishResponse::from)
+        .toList();
   }
 }

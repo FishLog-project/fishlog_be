@@ -1,5 +1,8 @@
 package com.fishlog.fishlog_be.global.init.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.List;
+
 /**
  * 어종 도감 콘텐츠 시드 1건. {@code name}은 {@code fishes.name}(UNIQUE)과 매칭되는 키다.
  *
@@ -8,5 +11,9 @@ package com.fishlog.fishlog_be.global.init.dto;
  * @param description 도감 설명
  * @param rarity 희귀도 문자열(대소문자 무관, 예 {@code "low"}/{@code "usually"}/{@code "high"}). 로더에서 {@link
  *     com.fishlog.fishlog_be.domain.fish.entity.Rarity}로 변환한다. 비었거나 알 수 없으면 null.
+ * @param seasons 제철(계절) 목록 — {@code "봄"}/{@code "여름"}/{@code "가을"}/{@code "겨울"} 중 다수. 로더에서 계절별
+ *     boolean으로 매핑한다. 없으면 전부 false.
  */
-public record FishContentSeed(String name, String habitat, String description, String rarity) {}
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record FishContentSeed(
+    String name, String habitat, String description, String rarity, List<String> seasons) {}

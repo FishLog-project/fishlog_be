@@ -18,7 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * Spring Security 필터 체인. 무상태(JWT) REST API. → docs/security.md §3
  *
- * <p>공개: 인증 API·조회성 GET(스팟/어종/랭킹)·Swagger. 그 외는 인증 필요. CORS는 {@code CorsConfig}의 소스를 사용.
+ * <p>공개: 인증 API·조회성 GET(스팟/어종/랭킹/배너)·Swagger. 그 외는 인증 필요. CORS는 {@code CorsConfig}의 소스를 사용.
  *
  * <p>랭킹은 목록 자체는 공개지만, 토큰이 있으면 필터가 principal(userId)을 세팅하므로 컨트롤러에서 로그인 시에만 내 순위(me)를 채운다.
  */
@@ -45,7 +45,11 @@ public class SecurityConfig {
                         "/api/auth/**", "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                     .permitAll()
                     .requestMatchers(
-                        HttpMethod.GET, "/api/spots/*", "/api/fish/**", "/api/rankings/**")
+                        HttpMethod.GET,
+                        "/api/spots/*",
+                        "/api/fish/**",
+                        "/api/rankings/**",
+                        "/api/banner/**")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
