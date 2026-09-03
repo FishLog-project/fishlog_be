@@ -67,6 +67,7 @@ public class FishContentSeedLoader {
       }
       // 신규·기존 공통으로 콘텐츠(설명·서식지·희귀도)를 덮어쓴다.
       fish.applyContent(seed.description(), seed.habitat(), rarity);
+      applySeasons(fish, seed);
     }
 
     Pruned pruned = prune(seedNames);
@@ -137,5 +138,18 @@ public class FishContentSeedLoader {
       log.warn("[seed] 알 수 없는 rarity 값 → null 처리: {}", raw);
       return null;
     }
+  }
+
+  /** 시드의 {@code seasons} 목록("봄/여름/가을/겨울")을 계절별 boolean으로 매핑해 어종에 적용한다. 없으면 전부 false. */
+  private void applySeasons(Fish fish, FishContentSeed seed) {
+    Set<String> seasons =
+        seed.seasons() == null
+            ? Set.of()
+            : new HashSet<>(seed.seasons().stream().map(String::trim).toList());
+    fish.applySeasons(
+        seasons.contains("봄"),
+        seasons.contains("여름"),
+        seasons.contains("가을"),
+        seasons.contains("겨울"));
   }
 }
