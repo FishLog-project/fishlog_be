@@ -25,6 +25,7 @@ public record SpotDetailResponse(
     @Schema(description = "경도", example = "125.08805") double lot,
     @Schema(description = "낚시 금지 여부", example = "false") boolean prohibit,
     @Schema(description = "분류(해양/내륙)", example = "해양") SpotCategory category,
+    @Schema(description = "누적 조회수", example = "128") long viewCount,
     @Schema(description = "주요 대상 어종명 목록", example = "[\"감성돔\", \"참돔\"]") List<String> majorFishes,
     @Schema(description = "오늘·현재 시간대(오전/오후) 예보 1건. 내륙 스팟·미제공 시 null") ForecastResponse forecast,
     @Schema(description = "내륙 스팟의 하천 제원(하폭·유수폭·수심). 해양 스팟이면 null")

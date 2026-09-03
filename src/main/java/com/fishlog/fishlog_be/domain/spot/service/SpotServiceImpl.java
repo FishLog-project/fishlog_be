@@ -89,6 +89,7 @@ public class SpotServiceImpl implements SpotService {
         spot.getLot(),
         spot.isProhibit(),
         spot.getCategory(),
+        spot.getViewCount(),
         majorFishes,
         forecast,
         inlandDetail);

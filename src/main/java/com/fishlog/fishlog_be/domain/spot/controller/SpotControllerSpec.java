@@ -69,6 +69,7 @@ public interface SpotControllerSpec {
           - 예보는 저장하지 않고 바다낚시지수 API를 호출해 Redis에 반나절(12h) 캐시한 뒤 스팟명으로 필터해 서빙합니다.
           - `forecast`는 **오늘 날짜(KST) + 현재 시각의 오전/오후 1건**입니다(오전 00~11시=오전, 12시~=오후). 단일 객체이며 없으면 `null`.
           - `inlandDetail`은 국립생태원 담수어류 조사의 **실측 저장값**이라 매 호출 동일합니다. 조사에서 빠진 항목은 개별 `null`입니다(하폭만 있고 유수폭·수심이 없는 스팟이 있습니다).
+          - `viewCount`(누적 조회수): 이 상세 조회 시 **사용자/IP별 1일 1회** 비동기로 증가합니다. 값은 증가 이전 시점 기준일 수 있습니다(비동기 집계).
 
           ### 제약조건
           - 경로 변수 `spotId`: 존재하는 스팟이어야 함(없으면 404).
@@ -104,6 +105,7 @@ public interface SpotControllerSpec {
                               "lot": 125.08805,
                               "prohibit": false,
                               "category": "해양",
+                              "viewCount": 128,
                               "majorFishes": ["감성돔", "참돔"],
                               "forecast": {
                                 "predcYmd": "2026-08-19",
@@ -135,6 +137,7 @@ public interface SpotControllerSpec {
                               "lot": 126.6797,
                               "prohibit": false,
                               "category": "내륙",
+                              "viewCount": 42,
                               "majorFishes": ["붕어", "잉어", "피라미"],
                               "forecast": null,
                               "inlandDetail": {
@@ -159,5 +162,8 @@ public interface SpotControllerSpec {
                             { "success": false, "code": 404, "message": "스팟을 찾을 수 없습니다.", "data": null }
                             """)))
   })
-  BaseResponse<SpotDetailResponse> getSpotDetail(@Parameter(example = "1") Long spotId);
+  BaseResponse<SpotDetailResponse> getSpotDetail(
+      @Parameter(example = "1") Long spotId,
+      @Parameter(hidden = true) Long userId,
+      @Parameter(hidden = true) jakarta.servlet.http.HttpServletRequest request);
 }
