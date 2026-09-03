@@ -2,7 +2,10 @@ package com.fishlog.fishlog_be.domain.fish.service;
 
 import com.fishlog.fishlog_be.domain.fish.dto.FishDetailResponse;
 import com.fishlog.fishlog_be.domain.fish.dto.FishListResponse;
+import com.fishlog.fishlog_be.domain.fish.dto.SeasonalFishResponse;
 import com.fishlog.fishlog_be.domain.fish.entity.Fish;
+import com.fishlog.fishlog_be.domain.fish.entity.Season;
+import java.util.List;
 
 /** 전체 도감(마스터 어종 카탈로그) 조회 서비스. */
 public interface FishService {
@@ -33,4 +36,7 @@ public interface FishService {
    * @throws com.fishlog.fishlog_be.global.exception.CustomException 어종이 없으면 {@code FISH_NOT_FOUND}
    */
   Fish getFishEntity(Long id);
+
+  /** 특정 계절에 제철인 어종 전체를 조회한다(배너 "계절별 추천 어종"의 후보군). 정렬·개수 제한·랜덤 선택은 호출부(배너 서비스)의 책임이다. 없으면 빈 목록. */
+  List<SeasonalFishResponse> getFishInSeason(Season season);
 }
