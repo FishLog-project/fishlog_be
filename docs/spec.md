@@ -223,6 +223,8 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
 
 `forecast`는 **오늘 날짜(KST) + 현재 시각의 오전/오후 1건**(단일 객체). 서버가 `predcYmd == 오늘` 且 `predcNoonSeCd == 오전|오후`(현재 시각 0~11시=오전, 12시~=오후)로 필터한다.
 
+`viewCount`(누적 조회수)는 이 상세 조회 시 **사용자/IP별 1일 1회** 비동기로 증가한다(GET 비차단, `@Async`). Redis dedup 키 `spot:view:dedup:{spotId}:{userId|ip}` TTL 24h — 처음 조회면 증가, 24h 내 재조회는 무시(로그인=userId / 비로그인=IP). 증가는 원자적 `UPDATE spots SET view_count = view_count + 1`. 목록(`GET /api/spots`)은 집계 대상이 아니다.
+
 ```jsonc
 // Response(data)
 {
@@ -232,6 +234,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   "lot": 125.08805,
   "prohibit": false,
   "category": "해양",
+  "viewCount": 128,
   "majorFishes": ["감성돔", "참돔"],
   "forecast": {
     "predcYmd": "2026-08-19", "predcNoonSeCd": "오전",
@@ -256,6 +259,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   "lot": 126.6797,
   "prohibit": false,
   "category": "내륙",
+  "viewCount": 42,
   "majorFishes": ["붕어", "잉어", "피라미"],
   "forecast": null,                     // 내륙 스팟은 항상 null
   "inlandDetail": {
@@ -678,8 +682,10 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `lot` | DOUBLE | NOT NULL | 경도 | API `lot` |
 | `prohibit` | BOOLEAN | NOT NULL | 낚시 금지 여부(기본 false) | 서비스 운영값(API 아님) |
 | `category` | ENUM(STRING) | nullable | 분류 **해양/내륙** | 시드 `category`(바다→해양·담수→내륙) |
+| `view_count` | BIGINT | NOT NULL, DEFAULT 0 | 상세 조회 누적수 | 서비스 집계(상세 조회 시 사용자/IP 1일 1회 비동기 증가) |
 
 - 현재 **92행**(확정 데이터셋: 해양 49/내륙 43 — 실측 상세가 없는 담수 6곳 제외). `name`에 **UNIQUE 확정**(엔티티 `@Column(unique = true)`) — 시드 upsert 기준 키로 사용.
+- `view_count`는 `@ColumnDefault("0")`라 기존 행도 0으로 채워지고 `ddl-auto=update`가 컬럼을 자동 추가한다(마이그레이션 불필요). 조회수 증가는 `@Async` + 원자적 `UPDATE`, 중복은 Redis dedup(`spot:view:dedup:*`, TTL 24h).
 - 좌표는 ERD v0.1의 FLOAT 대신 **`double`로 매핑**(위경도 소수 5자리 정밀도 보존).
 - `category`(`SpotCategory` enum 해양/내륙)는 `@Enumerated(STRING)`로 저장(값 "해양"/"내륙"). `ddl-auto=update`가 컬럼을 자동 추가하고, 기존 행은 재기동 시 시드가 backfill하므로 nullable. **상세 조회에서 해양=실시간 예보 병합 / 내륙=하천 제원(`inland_spot_detail`) 병합** 분기 기준이다.
 - 예보성 필드(낚시지수·날씨·물때)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
