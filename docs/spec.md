@@ -28,6 +28,7 @@
 | ✅ | POST | `/api/spots/{spotId}/favorite` | 스팟 찜 추가(idempotent) | 보호 |
 | ✅ | DELETE | `/api/spots/{spotId}/favorite` | 스팟 찜 해제(idempotent) | 보호 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
+| ✅ | GET | `/api/banner/seasonal-fish` | 계절별 추천 어종(현재 월 계절 제철 어종 랜덤 3종 — `fishId`·`name`·`imageUrl`) | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | ✅ | POST | `/api/collections/classify` | 사진으로 어종 후보(Top-3) 분류. **저장 없음(순수 조회)** → `docs/external.md` §2 | 보호 |
 | ✅ | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) + 도감 기록 | 보호 |
@@ -315,6 +316,32 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
 
 > `description`·`habitat`은 콘텐츠 시드(`data/fish/fish_content_seed.json`)로 채워진다 → 아래 "어종 도감 콘텐츠 시드". `imageUrl`·`rarity`는 아직 큐레이션 전이라 `null`로 응답된다.
 
+### 배너 (`/api/banner`) ✅
+
+홈 배너 콘텐츠. 현재는 "계절별 추천 어종" 하나이며, 추후 배너 항목이 늘면 이 베이스 경로에 추가한다.
+
+#### `GET /api/banner/seasonal-fish` — 계절별 추천 어종 ✅ (공개)
+
+서버의 **현재 월(KST)이 속한 계절**에 제철인 어종 중 **랜덤 3종**을 반환한다. 인증 불필요(홈 노출용 공개 API). 매 호출마다 셔플되어 순서·구성이 달라질 수 있다.
+
+- **계절 기준(월):** 봄 3~5월 · 여름 6~8월 · 가을 9~11월 · 겨울 12~2월. 판정은 `Season.of(month)`(fish 도메인), 현재 계절·랜덤 선택은 `BannerService`.
+- **후보 조회:** `FishService.getFishInSeason(Season)`이 해당 계절 제철 어종 전체(`fishes`의 계절 boolean 플래그 매칭)를 반환하고, 배너 서비스가 셔플 후 최대 3종으로 자른다.
+- **개수 부족 허용:** 제철 어종이 3종 미만이면 있는 만큼만 반환한다(빈 배열 가능, 예외 아님). 현재 시드는 계절당 11~21종이라 항상 3종이 채워진다.
+- `imageUrl`은 도감 이미지 큐레이션 전이라 현재 `null`로 응답된다.
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": [
+    { "fishId": 9, "name": "갈치", "imageUrl": null },
+    { "fishId": 3, "name": "돌돔", "imageUrl": null },
+    { "fishId": 17, "name": "쏘가리", "imageUrl": null }
+  ]
+}
+```
+
 ### 그 외 엔드포인트
 📋 TBD — 나머지 엔드포인트별 요청/응답 예시(JSON)와 유효성 규칙을 여기에 기록.
 
@@ -471,7 +498,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 |---|---|
 | 시드 파일 | `data/fish/fish_content_seed.json` (프로젝트 루트 `data/`, 서브모듈 아님) |
 | 경로 프로퍼티 | `fishlog.seed.fish-content-location` (기본 `file:data/fish/fish_content_seed.json`) |
-| 스키마 | `{ "fishes": [ { "name", "habitat", "description", "rarity" } ] }` — `name`이 `fishes.name`(UNIQUE)과 매칭되는 키 |
+| 스키마 | `{ "fishes": [ { "name", "habitat", "description", "rarity", "seasons" } ] }` — `name`이 `fishes.name`(UNIQUE)과 매칭되는 키. `seasons`는 `"봄"/"여름"/"가을"/"겨울"` 배열(제철, 아래 참고) |
 | 대상 | 확정 24종 (위 "스팟·어종 확정 데이터셋"과 동일 목록). `기타어종`·`-`는 시드에 없음 |
 | 실행 시점 | `SeedDataInitializer`가 **스팟 시드 다음에** 호출 (어종 행이 먼저 존재해야 하므로) |
 | 활성 조건 | `fishlog.seed.enabled=true` (= 로컬 전용, 운영은 Flyway 트랙) |
@@ -479,6 +506,9 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 **설계 결정 사항**
 - **`habitat` 값 집합 ✅:** 확정 24종 기준 `바다`(14)·`강`(4)·`저수지`(4)·`하천`(2) 4가지. 담수 어종이 들어오면서 이 컬럼이 실제 의미를 갖게 됐다. 값 집합이 닫혀 있으므로 enum 화는 📋 TBD(현재는 `String`).
 - **`rarity` 값 집합 ✅:** `low`(12)·`usually`(10)·`high`(2). `FishContentSeedLoader.parseRarity()`가 대소문자 무관하게 `Rarity` enum 으로 변환하며, 비었거나 알 수 없는 값은 `null`.
+- **`seasons` = 제철(계절) 다중값 ✅:** 한 어종이 여러 계절에 제철일 수 있어 `fishes`에 **계절별 boolean 4컬럼**(`season_spring`·`season_summer`·`season_fall`·`season_winter`)으로 저장한다(별도 테이블 없음). 시드의 `"봄/여름/가을/겨울"` 배열을 `FishContentSeedLoader.applySeasons()`가 각 boolean으로 매핑하고, 배열에 없는 계절은 `false`. 배너 "계절별 추천 어종"(`GET /api/banner/seasonal-fish`)이 이 플래그로 현재 계절 제철 어종을 고른다.
+  - **컬럼 추가 방식 ✅:** `@ColumnDefault("false")`라 `ddl-auto=update`가 NOT NULL 컬럼을 기본값 `false`로 추가하므로 **기존 행 수동 마이그레이션이 불필요**하다. 값은 다음 기동의 콘텐츠 시드 덮어쓰기로 채워진다.
+  - **어종 시즌 vs 스팟×어종 시즌 구분 ✅:** 여기 `seasons`는 **어종 자체의 제철**(도감 속성)이다. 스팟에서 그 어종이 잡히는 시기(`major_fish.season`)는 개념·출처가 다른 별개 값으로 아직 **TBD**(위 "스팟 데이터 설계" 참고).
 - **`SpotSeedLoader`와 분리 ✅(확정):** 스팟 매핑(`major_fish`)과 도감 콘텐츠는 갱신 주기·출처가 다르다. 또 `SpotSeedLoader`는 어종을 **없을 때만 insert** 하므로, 콘텐츠를 거기에 얹으면 기존 행이 갱신되지 않는다. 콘텐츠 로더는 매 기동 실행되며 **기존 행을 update** 한다(`Fish.applyContent()` + JPA dirty checking, `save()` 호출 없음).
 - **적용 정책 = 항상 덮어쓰기 ✅(확정):** JSON이 도감 콘텐츠의 **단일 진실 공급원**. 기동 때마다 시드 값으로 덮어쓰므로 JSON 수정 → 재시작만으로 반영된다. 값이 같으면 Hibernate가 UPDATE를 생략하므로 반복 비용은 없다.
   - **트레이드오프:** DB에서 직접 수정한 콘텐츠는 **다음 기동에 사라진다.** 관리자 편집 기능을 도입하면 이 정책을 재검토해야 한다 📋.

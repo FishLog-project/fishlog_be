@@ -114,7 +114,7 @@ POST   /api/users/me/profile-image  (multipart image)             → S3 업로�
 
 ## 3. 인가 (엔드포인트 정책)
 
-- **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 스팟 **상세**(`GET /api/spots/*`)·어종(`GET /api/fish/**`), 랭킹(`GET /api/rankings/**`), Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
+- **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 스팟 **상세**(`GET /api/spots/*`)·어종(`GET /api/fish/**`), 랭킹(`GET /api/rankings/**`), 배너(`GET /api/banner/**` — 홈 노출용 계절별 추천 어종), Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
   - ⚠️ **스팟 목록 `GET /api/spots`(정확 경로)는 보호로 전환됨** — 응답에 로그인 사용자의 `isFavorite`를 넣기 위함. permitAll 매처를 `/api/spots/**`→`/api/spots/*`로 좁혀 **상세(`/{id}`)만 공개, 목록은 `authenticated()`** 로 처리(`SecurityConfig`).
   - **랭킹은 공개지만 토큰을 보면 더 준다:** 목록·Top3는 누구나 조회 가능하고, `Authorization` 헤더가 있으면 필터가 principal(userId)을 세팅해 컨트롤러가 `me`(내 순위)까지 채운다. 토큰이 없으면 `me: null`.
 - **보호(인증 필요):** 마이페이지(`GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`, `DELETE /api/users/me`, `POST /api/users/me/profile-image`), 내 도감 조회(`GET /api/collections`, `GET /api/collections/dex`), 어종 분류·인증(`POST /api/collections/classify`, `POST /api/collections/verify`), **스팟 목록(`GET /api/spots`)·스팟 찜(`POST`/`DELETE /api/spots/{id}/favorite`)** 등 **사용자 소유/개인화 리소스**.
