@@ -33,29 +33,46 @@ public interface CollectionControllerSpec {
       description =
           """
           ### 설명
-          - 특정 어종에 대해 **로그인 사용자**가 인증한 사진 목록(`imageUrls`)과 잡은 횟수(`catchCount`)를 반환합니다.
-          - 어종 상세 화면에서 "내가 이 물고기를 몇 번, 어떤 사진으로 잡았는지"를 보여줄 때 사용합니다.
-          - `catchCount`는 별도 저장값이 아니라 인증 기록 수에서 파생됩니다(= `imageUrls.length`).
+          - 특정 어종에 대해 **로그인 사용자**의 최근 인증 사진(`recentCatches`)과 잡은 총 횟수(`catchCount`), 그리고 그 어종의 서식지(`habitat`)를 반환합니다.
+          - 어종 상세 화면에서 "내가 이 물고기를 몇 번, 어떤 사진으로, 어디서 몇 cm 짜리를 잡았는지"를 보여줄 때 사용합니다.
+          - `habitat`은 인증 기록이 아니라 **어종의 속성**이라, 아직 안 잡은 어종(`catchCount:0`)이어도 채워집니다.
+            값 집합은 `바다` · `강` · `저수지` · `하천`이며, 콘텐츠가 없는 어종은 `null`일 수 있습니다.
+
+          ### 화면 구성 가이드 (썸네일 4칸 + 오버레이)
+          - `recentCatches`는 **최신순 최대 4장**입니다. 그대로 순서대로 썸네일에 깔면 됩니다.
+            4장 미만이면 있는 만큼만 오고(0장이면 빈 배열), 별도 패딩은 없습니다.
+          - 썸네일을 눌러 오버레이로 크게 띄울 때 필요한 값이 **항목마다 모두 들어 있습니다** —
+            `imageUrl`(큰 사진) · `size`(그때 기록한 cm) · `location`(그때 수기 입력한 위치) · `verifiedAt`(등록 시각).
+            추가 조회 없이 배열 항목 하나만 들고 오버레이를 그릴 수 있습니다.
+          - `location`은 **선택 입력이라 `null`일 수 있습니다.** 오버레이에서 위치 줄을 숨기거나 "위치 미기록"으로 처리하세요.
+          - `verifiedAt`은 촬영 시각이 아니라 **서버에 인증이 등록된 시각**입니다(EXIF를 읽지 않습니다).
+
+          ### catchCount vs recentCatches.length (중요)
+          - `catchCount`는 **자르지 않은 전체 인증 횟수**이고, `recentCatches`만 4장으로 제한됩니다.
+            7번 잡았다면 `catchCount:7` + `recentCatches` 4개가 정상입니다.
+          - 남은 장수는 `catchCount - recentCatches.length`로 계산해 "+3장 더" 같은 배지를 그릴 수 있습니다.
 
           ### 사용 방법
           - `GET /api/collections?fishId={fishId}` + 헤더 `Authorization: Bearer {accessToken}`
             - 예: `GET /api/collections?fishId=1`
           - 사용자 신원은 토큰에서 얻습니다(userId 파라미터 없음).
-          - `fishId`는 전체 도감(`GET /api/fish`) 응답의 어종 id를 사용합니다.
+          - `fishId`는 내 도감(`GET /api/collections/dex`) 응답의 어종 id를 사용합니다.
 
           ### 제약조건
-          - `fishId` **필수** 쿼리 파라미터입니다.
-          - 아직 잡지 않은 어종이어도 **에러가 아닙니다** → `200` + `catchCount:0` + 빈 목록(`imageUrls:[]`).
+          - `fishId` **필수** 쿼리 파라미터이며, 도감에 존재하는 어종이어야 합니다.
+          - 아직 잡지 않은 어종이어도 **에러가 아닙니다** → `200` + `catchCount:0` + 빈 목록(`recentCatches:[]`) + `habitat`은 채워짐.
+          - 5장 이상 잡았어도 사진은 항상 최대 4장만 옵니다(전체 사진을 받는 별도 엔드포인트는 아직 없습니다).
 
           ### ⚠ 예외상황
           - `401`: 토큰이 없거나 무효한 경우.
           - `400`: `fishId`가 누락되었거나 숫자가 아닌 경우(공통 파라미터 검증, `GlobalErrorCode`).
-          - 존재하지 않는 `fishId`를 넘겨도 현재는 404가 아니라 빈 결과(`catchCount:0`)를 반환합니다.
+          - `F001(404)`: 도감에 없는 `fishId`인 경우. **"안 잡은 어종"과는 다릅니다** —
+            어종 자체가 존재하면 잡지 않았어도 `200`입니다.
           """)
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
-        description = "조회 성공(미인증 어종 포함)",
+        description = "조회 성공(미인증 어종 포함). 사진은 최신순 최대 4장",
         content =
             @Content(
                 mediaType = "application/json",
@@ -69,10 +86,23 @@ public interface CollectionControllerSpec {
                             "code": 200,
                             "message": "요청이 성공적으로 처리되었습니다.",
                             "data": {
-                              "catchCount": 2,
-                              "imageUrls": [
-                                "https://.../catch/10.png",
-                                "https://.../catch/11.png"
+                              "habitat": "바다",
+                              "catchCount": 7,
+                              "recentCatches": [
+                                {
+                                  "catchRecordId": 42,
+                                  "imageUrl": "https://.../fish/uuid1.jpg",
+                                  "size": 31.0,
+                                  "location": "격포항 방파제",
+                                  "verifiedAt": "2026-09-01T14:32:10"
+                                },
+                                {
+                                  "catchRecordId": 39,
+                                  "imageUrl": "https://.../fish/uuid2.jpg",
+                                  "size": 27.5,
+                                  "location": null,
+                                  "verifiedAt": "2026-08-24T08:11:02"
+                                }
                               ]
                             }
                           }
@@ -85,7 +115,7 @@ public interface CollectionControllerSpec {
                             "success": true,
                             "code": 200,
                             "message": "요청이 성공적으로 처리되었습니다.",
-                            "data": { "catchCount": 0, "imageUrls": [] }
+                            "data": { "habitat": "저수지", "catchCount": 0, "recentCatches": [] }
                           }
                           """)
                 })),
@@ -122,6 +152,23 @@ public interface CollectionControllerSpec {
                               "message": "인증이 필요합니다.",
                               "data": null
                             }
+                            """))),
+    @ApiResponse(
+        responseCode = "404",
+        description = "도감에 없는 어종(F001). 안 잡은 어종은 404가 아니라 200입니다.",
+        content =
+            @Content(
+                mediaType = "application/json",
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": false,
+                              "code": 404,
+                              "message": "해당 어종을 찾을 수 없습니다.",
+                              "data": null
+                            }
                             """)))
   })
   BaseResponse<CatchRecordResponse> getMyCatch(
@@ -136,6 +183,8 @@ public interface CollectionControllerSpec {
           ### 설명
           - 전체 수집 대상 어종을 도감 순서(어종 ID 오름차순)대로 반환하며, 각 칸에 **로그인 사용자가** 잡았는지(`caught`)를 표시합니다.
           - `caught=true`면 도감 이미지를, `false`면 같은 이미지를 그림자(실루엣)로 렌더하도록 프론트가 분기합니다(그림자는 클라이언트 이펙트, 서버는 플래그만 내려줌).
+          - **잡은 횟수·인증 사진은 이 응답에 없습니다.** 그리드는 획득/미획득만 그리고, 칸을 눌렀을 때
+            `GET /api/collections?fishId={id}`로 해당 어종의 `catchCount`·`imageUrls`를 조회하세요.
           - `totalCount`(전체 수집 대상 수)와 `caughtCount`(내가 잡은 수)로 도감 완성도를 함께 계산할 수 있어, 별도 조회 없이 진행도 바를 그릴 수 있습니다. → docs/ranking.md
 
           ### 사용 방법
@@ -143,10 +192,15 @@ public interface CollectionControllerSpec {
           - 사용자 신원은 토큰에서 얻습니다(userId 파라미터 없음).
 
           ### 제약조건
-          - `fishes` 배열의 순서·집합은 `GET /api/fish` 전체 도감과 동일합니다(잡은 어종 여부만 덧입힘).
+          - `fishes` 배열의 순서·집합은 전체 도감과 동일합니다(잡은 어종 여부만 덧입힘).
 
           ### rarity(희귀도) enum
           - `LOW` · `USUALLY` · `HIGH`
+
+          ### habitat(서식지)
+          - 어종이 주로 서식하는 곳입니다: `바다` · `강` · `저수지` · `하천`
+          - 도감을 서식지별 탭·그룹으로 묶을 때 사용합니다.
+          - 콘텐츠가 아직 채워지지 않은 어종은 `null`일 수 있으니 "기타" 등으로 처리하세요.
 
           ### ⚠ 예외상황
           - `401`: 토큰이 없거나 무효한 경우.
@@ -176,13 +230,15 @@ public interface CollectionControllerSpec {
                                     "name": "감성돔",
                                     "imageUrl": "https://.../fish/1.png",
                                     "rarity": "USUALLY",
+                                    "habitat": "바다",
                                     "caught": true
                                   },
                                   {
                                     "id": 2,
-                                    "name": "참돔",
+                                    "name": "붕어",
                                     "imageUrl": "https://.../fish/2.png",
-                                    "rarity": "HIGH",
+                                    "rarity": "LOW",
+                                    "habitat": "저수지",
                                     "caught": false
                                   }
                                 ]
@@ -333,15 +389,25 @@ public interface CollectionControllerSpec {
             - `image`: 인증 사진(이미지 파일 1개)
             - `fishId`: 확정한 어종 id (`classify` 후보의 `fishId` 또는 `GET /api/collections/dex`의 어종 id)
             - `size`: 잡은 크기(cm, 실수 가능 — 예 `27.5`)
+            - `location`: **잡은 위치(선택)** — 사용자가 직접 적는 자유 텍스트 (예: `충주호 종댕이길 선착장`)
+
+          ### 잡은 위치(`location`) 입력 규칙
+          - **선택 입력입니다.** 생략하거나 빈 값을 보내면 위치 없이(`null`) 기록됩니다.
+          - 등록된 낚시 스팟을 고르는 것이 아니라 **사용자가 직접 적는 자유 텍스트**입니다.
+            개인 포인트·유료 낚시터처럼 스팟 목록에 없는 장소도 그대로 기록할 수 있습니다.
+          - 앞뒤 공백은 서버가 제거하고, 공백만 입력한 경우는 미입력(`null`)과 동일하게 처리합니다.
+          - 최대 100자입니다.
 
           ### 제약조건
           - 이미지 파일만, 최대 5MB
           - `size`는 필수이며 0 초과 300 이하(cm). 크기 랭킹(`GET /api/rankings/size`) 기준값이라 NOT NULL 입니다.
+          - `location`은 선택이며 최대 100자입니다.
           - 사용자 신원은 토큰에서 얻습니다(userId 파라미터 없음).
 
           ### ⚠ 예외상황
           - `C001(400)`: 크기가 없거나 0 이하
           - `C002(400)`: 크기가 현실 범위(300cm) 초과
+          - `C003(400)`: 잡은 위치가 100자를 초과
           - `F001(404)`: 해당 어종이 도감에 없음
           - `S001(400)`·`S002(400)`·`S003(400)`: 사진 없음·이미지 아님·5MB 초과
           - `S004(500)`: S3 업로드 실패
@@ -368,6 +434,7 @@ public interface CollectionControllerSpec {
                                 "fishName": "붕어",
                                 "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
                                 "size": 27.5,
+                                "location": "충주호 종댕이길 선착장",
                                 "firstCatch": true,
                                 "catchCount": 1
                               }
@@ -400,5 +467,7 @@ public interface CollectionControllerSpec {
       @Parameter(hidden = true) Long userId,
       @Parameter(description = "확정한 어종 ID", example = "15") Long fishId,
       @Parameter(description = "잡은 크기(cm)", example = "27.5") Double size,
+      @Parameter(description = "잡은 위치(수기 입력, 선택, 최대 100자)", example = "충주호 종댕이길 선착장")
+          String location,
       @Parameter(description = "인증 사진(이미지, 최대 5MB)") MultipartFile image);
 }
