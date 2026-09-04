@@ -29,6 +29,7 @@
 | ✅ | DELETE | `/api/spots/{spotId}/favorite` | 스팟 찜 해제(idempotent) | 보호 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/banner/seasonal-fish` | 계절별 추천 어종(현재 월 계절 제철 어종 랜덤 3종 — `fishId`·`name`·`imageUrl`) | 공개 |
+| ✅ | GET | `/api/tours/nearby` | 현재 위치 주변 관광 장소(관광지/숙박/음식점 — `type`·`lat`·`lng`·`radius`·`page`, 거리순 30개) | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | ✅ | POST | `/api/collections/classify` | 사진으로 어종 후보(Top-3) 분류. **저장 없음(순수 조회)** → `docs/external.md` §2 | 보호 |
 | ✅ | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) + 도감 기록 | 보호 |
@@ -341,6 +342,53 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   ]
 }
 ```
+
+### 관광 (`/api/tours`) ✅
+
+사용자 현재 위치 주변의 관광 장소를 조회한다. 한국관광공사 TourAPI(`KorService2/locationBasedList2`)를 **매 요청 실시간 호출**한다(Redis·DB 미사용). 연동 상세 → `docs/external.md` §2.
+
+#### `GET /api/tours/nearby` — 주변 관광 장소 ✅ (공개)
+
+요청: `GET /api/tours/nearby?type=음식점&lat=37.5665&lng=126.9780&radius=5000&page=1`
+
+| 파라미터 | 타입 | 필수 | 기본 | 설명 |
+|---|---|---|---|---|
+| `type` | string | ✅ | — | 카테고리(한글): `관광지`/`숙박`/`음식점`. 그 외 값은 `INVALID_TYPE(400)` |
+| `lat` | double | ✅ | — | 위도 |
+| `lng` | double | ✅ | — | 경도 |
+| `radius` | int | — | 5000 | 반경(m). 1~20000 범위로 보정 |
+| `page` | int | — | 1 | 페이지(1-base). 페이지당 **30개 고정**, 거리순 |
+
+- 응답 각 항목은 `title·firstImage·firstImage2·addr1·addr2·mapX·mapY` (이미지·상세주소 없으면 `null`, 좌표는 double).
+- `hasNext` = `page × 30 < totalCount`. `totalCount`는 TourAPI가 알려주는 반경 내 전체 건수.
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "type": "음식점",
+    "page": 1,
+    "numOfRows": 30,
+    "totalCount": 128,
+    "hasNext": true,
+    "items": [
+      {
+        "title": "해운대암소갈비집",
+        "firstImage": "http://tong.visitkorea.or.kr/cms/image1.jpg",
+        "firstImage2": "http://tong.visitkorea.or.kr/cms/thumb1.jpg",
+        "addr1": "부산광역시 해운대구 중동2로10번길 32-10",
+        "addr2": null,
+        "mapX": 129.1626,
+        "mapY": 35.1631
+      }
+    ]
+  }
+}
+```
+
+> ⚠ 예외: `INVALID_TYPE(400)` 지원하지 않는 카테고리 · `TOUR_API_ERROR(502)` TourAPI 응답 오류(쿼터 초과·비정상 응답) · `TOUR_API_UNAVAILABLE(503)` 연결 실패·타임아웃. 실시간·무캐시라 요청당 외부 1콜(재시도 시 2콜) → data.go.kr 쿼터 관리 필요.
 
 ### 그 외 엔드포인트
 📋 TBD — 나머지 엔드포인트별 요청/응답 예시(JSON)와 유효성 규칙을 여기에 기록.
