@@ -17,6 +17,7 @@ public record VerifyResponse(
     @Schema(description = "업로드된 인증 사진 S3 URL", example = "https://.../fish/uuid.jpg")
         String imageUrl,
     @Schema(description = "기록한 크기(cm)", example = "27.5") Double size,
+    @Schema(description = "기록한 잡은 위치(수기 입력, 미입력 시 null)", example = "충주호 종댕이길 선착장") String location,
     @Schema(description = "이 어종을 처음 잡았는지(도감 새 칸 획득 여부)", example = "true") boolean firstCatch,
     @Schema(description = "이 어종을 지금까지 잡은 총 횟수(이번 인증 포함)", example = "1") int catchCount) {
 
@@ -27,6 +28,7 @@ public record VerifyResponse(
         fishName,
         record.getCertifiedImageUrl(),
         record.getSize(),
+        record.getCatchLocation(),
         catchCount == 1,
         catchCount);
   }

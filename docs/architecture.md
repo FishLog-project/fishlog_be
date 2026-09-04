@@ -36,9 +36,9 @@ com.fishlog.fishlog_be
 │  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행
 │  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex · POST /classify, /verify (모두 보호)
 │  │  ├─ service/CollectionService.java · CollectionServiceImpl.java
-│  │  ├─ dto/CatchRecordResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
+│  │  ├─ dto/CatchRecordResponse · CatchPhotoResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
 │  │  ├─ entity/CatchRecord.java
-│  │  ├─ exception/CollectionErrorCode.java            # C001~C002 (크기 검증)
+│  │  ├─ exception/CollectionErrorCode.java            # C001~C003 (크기·잡은 위치 검증)
 │  │  └─ repository/CatchRecordRepository.java · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
 │  ├─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
 │  │  ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)

@@ -10,11 +10,16 @@ import org.springframework.web.multipart.MultipartFile;
 public interface CollectionService {
 
   /**
-   * 로그인 사용자가 특정 어종을 인증한 기록 요약(잡은 횟수 + 사진 URL)을 조회한다.
+   * 로그인 사용자가 특정 어종을 인증한 기록 요약(서식지 + 잡은 총 횟수 + 최근 인증 사진)을 조회한다.
+   *
+   * <p>사진은 <b>최신순 최대 4장</b>으로 자르지만 {@code catchCount}는 자르지 않은 전체 횟수다 — 화면이 썸네일 4칸만 그리기 때문이며, "더
+   * 있다"는 사실은 두 값의 차이로 남는다. 각 사진 항목에 그때 기록한 크기·위치가 함께 담겨 오버레이에 추가 조회가 필요 없다.
    *
    * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
    * @param fishId 전체 도감 어종 id
-   * @return 안 잡았어도 예외가 아니라 catchCount 0 · 빈 목록
+   * @return 안 잡았어도 예외가 아니라 catchCount 0 · 빈 목록(서식지는 채워짐)
+   * @throws com.fishlog.fishlog_be.global.exception.CustomException 도감에 없는 어종이면 {@code
+   *     FISH_NOT_FOUND}(404). 서식지를 채우려 어종을 조회하기 때문이며, "안 잡은 어종"(200)과는 다르다
    */
   CatchRecordResponse getMyCatch(Long userId, Long fishId);
 
@@ -40,8 +45,8 @@ public interface CollectionService {
   /**
    * 사진으로 어종 후보(Top-3)를 분류한다. <b>저장하지 않는 순수 조회</b>다 — S3에도, DB에도 아무것도 쓰지 않는다.
    *
-   * <p>사용자가 후보 중 하나를 고른 뒤 {@link #verify(Long, Long, Double, MultipartFile)}로 실제 인증을 완료한다. 분류와 저장을
-   * 나눈 이유는 Top-1 정확도가 81%뿐이라 자동 확정이 5건 중 1건꼴로 도감을 오염시키기 때문이다(Top-3는 90.7%).
+   * <p>사용자가 후보 중 하나를 고른 뒤 {@link #verify(Long, Long, Double, String, MultipartFile)}로 실제 인증을 완료한다.
+   * 분류와 저장을 나눈 이유는 Top-1 정확도가 81%뿐이라 자동 확정이 5건 중 1건꼴로 도감을 오염시키기 때문이다(Top-3는 90.7%).
    *
    * @param image 원본 이미지(리사이즈·재인코딩 없이 모델로 전달)
    * @return 후보 목록. 모델이 확신하지 못해도({@code uncertain}) 후보는 그대로 담긴다
@@ -59,9 +64,12 @@ public interface CollectionService {
    * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
    * @param fishId 사용자가 확정한 어종 id
    * @param size 잡은 크기(cm, 필수 — 크기 랭킹 기준)
+   * @param location 잡은 위치 수기 입력(선택). {@code null}·공백이면 위치 없이 기록하며, 앞뒤 공백은 제거해 저장한다
    * @param image 인증 사진(S3 {@code fish/} 경로에 저장)
    * @throws com.fishlog.fishlog_be.global.exception.CustomException 어종 미존재 {@code
-   *     FISH_NOT_FOUND}(404), 크기 이상 {@code CollectionErrorCode}(400), 업로드 실패 {@code S3ErrorCode}
+   *     FISH_NOT_FOUND}(404), 크기 이상·위치 길이 초과 {@code CollectionErrorCode}(400), 업로드 실패 {@code
+   *     S3ErrorCode}
    */
-  VerifyResponse verify(Long userId, Long fishId, Double size, MultipartFile image);
+  VerifyResponse verify(
+      Long userId, Long fishId, Double size, String location, MultipartFile image);
 }

@@ -10,10 +10,11 @@ public record FishSummaryResponse(
     @Schema(description = "어종 ID", example = "1") Long id,
     @Schema(description = "어종명", example = "감성돔") String name,
     @Schema(description = "도감 이미지 URL(S3)", example = "https://.../fish/1.png") String imageUrl,
-    @Schema(description = "희귀도", example = "USUALLY") Rarity rarity) {
+    @Schema(description = "희귀도", example = "USUALLY") Rarity rarity,
+    @Schema(description = "서식지(바다/강/저수지/하천)", example = "바다") String habitat) {
 
   public static FishSummaryResponse from(Fish fish) {
     return new FishSummaryResponse(
-        fish.getId(), fish.getName(), fish.getImageUrl(), fish.getRarity());
+        fish.getId(), fish.getName(), fish.getImageUrl(), fish.getRarity(), fish.getHabitat());
   }
 }

@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,6 +40,12 @@ public class CollectionServiceImpl implements CollectionService {
   /** 기록 가능한 어종 크기 상한(cm). 국내 대상어 최대치(대형 방어·갈치)를 크게 웃도는 값으로, 오타·장난 입력이 크기 랭킹을 장악하는 것을 막는다. */
   private static final double MAX_SIZE_CM = 300.0;
 
+  /**
+   * 도감 상세에서 내려주는 최근 인증 사진 수. 화면이 썸네일 4칸을 깔고 누르면 오버레이로 키우는 구조라, 그 이상은 어차피 그리지 않는다. 인증을 수백 번 한 어종에서
+   * 응답이 무한정 커지는 것도 막는다.
+   */
+  private static final int RECENT_PHOTO_LIMIT = 4;
+
   private final CatchRecordRepository catchRecordRepository;
   // 도메인 간 접근은 상대 도메인의 service 인터페이스로만 한다(fish 의 repository·entity 직접 접근 금지).
   private final FishService fishService;
@@ -47,9 +54,16 @@ public class CollectionServiceImpl implements CollectionService {
 
   @Override
   public CatchRecordResponse getMyCatch(Long userId, Long fishId) {
-    // (userId, fishId) 로 인증 기록을 모아 응답으로 변환한다. 안 잡았으면 빈 리스트 → 200 + catchCount 0.
-    List<CatchRecord> records = catchRecordRepository.findByUserIdAndFish_Id(userId, fishId);
-    return CatchRecordResponse.of(records);
+    // 서식지는 기록이 아니라 어종의 속성이라 어종을 먼저 조회한다 — 안 잡은 어종은 기록이 0건이라
+    // 거기서 서식지를 끌어올 수 없다. 이 조회 때문에 없는 fishId 는 빈 결과가 아니라 F001(404)가 된다.
+    Fish fish = fishService.getFishEntity(fishId);
+    // 전체 횟수는 따로 센다 — 아래에서 사진을 4장으로 자르므로 리스트 크기로는 총 횟수를 알 수 없다.
+    int catchCount = (int) catchRecordRepository.countByUserIdAndFish_Id(userId, fishId);
+    // 최신순 상위 N건만 조회. 안 잡았으면 빈 리스트 → 200 + catchCount 0 + recentCatches [].
+    List<CatchRecord> recentRecords =
+        catchRecordRepository.findByUserIdAndFish_IdOrderByCreatedAtDescIdDesc(
+            userId, fishId, PageRequest.of(0, RECENT_PHOTO_LIMIT));
+    return CatchRecordResponse.of(fish.getHabitat(), catchCount, recentRecords);
   }
 
   @Override
@@ -91,8 +105,11 @@ public class CollectionServiceImpl implements CollectionService {
 
   @Override
   @Transactional
-  public VerifyResponse verify(Long userId, Long fishId, Double size, MultipartFile image) {
+  public VerifyResponse verify(
+      Long userId, Long fishId, Double size, String location, MultipartFile image) {
     validateSize(size);
+    // 정규화를 업로드보다 먼저 끝낸다 — 길이 초과로 400을 낼 거라면 S3에 올리기 전이어야 한다.
+    String catchLocation = normalizeLocation(location);
     // 어종 확인을 업로드보다 먼저 한다 — 없는 어종이면 S3에 고아 객체를 남기지 않고 404로 끝난다.
     Fish fish = fishService.getFishEntity(fishId);
 
@@ -106,10 +123,17 @@ public class CollectionServiceImpl implements CollectionService {
                   .fish(fish)
                   .certifiedImageUrl(imageUrl)
                   .size(size)
+                  .catchLocation(catchLocation)
                   .build());
       // 이번 인증 포함 횟수 = 직전까지의 횟수 + 1. 저장된 컬럼이 아니라 행 개수에서 파생한다(옵션 B).
       int catchCount = (int) catchRecordRepository.countByUserIdAndFish_Id(userId, fishId);
-      log.info("어종 인증 저장: userId={}, fishId={}, size={}cm, {}번째", userId, fishId, size, catchCount);
+      log.info(
+          "어종 인증 저장: userId={}, fishId={}, size={}cm, location={}, {}번째",
+          userId,
+          fishId,
+          size,
+          catchLocation,
+          catchCount);
       return VerifyResponse.of(saved, fish.getName(), catchCount);
     } catch (RuntimeException e) {
       // DB 저장이 실패하면 트랜잭션은 롤백되지만 S3 객체는 남는다 → 명시적으로 되돌린다(고아 객체 방지).
@@ -144,6 +168,24 @@ public class CollectionServiceImpl implements CollectionService {
       return Optional.empty();
     }
     return fishService.getFishList(species).fishes().stream().findFirst();
+  }
+
+  /**
+   * 수기 입력 위치를 저장 형태로 정규화한다. 앞뒤 공백을 제거하고, 미입력·공백만 입력은 모두 {@code null}로 모은다 — "빈 문자열"과 "미입력"이 섞이면 조회
+   * 쪽에서 두 가지 빈 값을 각각 처리해야 하기 때문이다.
+   *
+   * @throws CustomException 트림 후 길이가 {@link CatchRecord#MAX_LOCATION_LENGTH}를 넘으면 {@code C003}. 컬럼
+   *     길이와 같은 상수를 보므로 DB가 잘라내기 전에 400으로 걸러진다
+   */
+  private String normalizeLocation(String location) {
+    if (location == null || location.isBlank()) {
+      return null;
+    }
+    String trimmed = location.trim();
+    if (trimmed.length() > CatchRecord.MAX_LOCATION_LENGTH) {
+      throw new CustomException(CollectionErrorCode.LOCATION_TOO_LONG);
+    }
+    return trimmed;
   }
 
   private void validateSize(Double size) {
