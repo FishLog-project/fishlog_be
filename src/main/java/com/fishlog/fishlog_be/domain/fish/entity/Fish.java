@@ -13,6 +13,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.ColumnDefault;
 
 /**
  * 어종 — 도감 기준 데이터. ERD v0.1 기준.
@@ -54,6 +55,27 @@ public class Fish extends BaseTimeEntity {
   private Rarity rarity;
 
   /**
+   * 제철(계절) — 어종이 잘 잡히는 계절. 한 어종이 여러 계절에 제철일 수 있어 계절별 boolean 4컬럼으로 둔다(다중값). 콘텐츠 시드가 채운다.
+   * {@code @ColumnDefault("false")}로 기존 행도 false로 채워진다(ddl-auto=update). 배너 "계절별 추천 어종"에 사용. →
+   * docs/spec.md
+   */
+  @Column(name = "season_spring", nullable = false)
+  @ColumnDefault("false")
+  private boolean springSeason;
+
+  @Column(name = "season_summer", nullable = false)
+  @ColumnDefault("false")
+  private boolean summerSeason;
+
+  @Column(name = "season_fall", nullable = false)
+  @ColumnDefault("false")
+  private boolean fallSeason;
+
+  @Column(name = "season_winter", nullable = false)
+  @ColumnDefault("false")
+  private boolean winterSeason;
+
+  /**
    * 도감 콘텐츠(설명·서식지·희귀도)를 채운다. 시드 로더({@code FishContentSeedLoader})가 사용하며, 엔티티에 setter 를 열지 않기 위한 도메인
    * 메서드다. 적용 여부 판단은 호출부(로더)의 책임이다.
    */
@@ -61,5 +83,14 @@ public class Fish extends BaseTimeEntity {
     this.description = description;
     this.habitat = habitat;
     this.rarity = rarity;
+  }
+
+  /** 제철(계절) 플래그를 채운다. 콘텐츠 시드 로더가 사용한다. */
+  public void applySeasons(
+      boolean springSeason, boolean summerSeason, boolean fallSeason, boolean winterSeason) {
+    this.springSeason = springSeason;
+    this.summerSeason = summerSeason;
+    this.fallSeason = fallSeason;
+    this.winterSeason = winterSeason;
   }
 }

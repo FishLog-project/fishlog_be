@@ -23,10 +23,12 @@
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | POST | `/api/users/me/profile-image` | 프로필 이미지 업로드/변경(multipart, S3) | 보호 |
 | ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`·`isFavorite`(찜 여부)) | 보호 |
+| ✅ | GET | `/api/spots/popular` | 인기 스팟(조회수 Top3 — 좌표·`category`·`viewCount`·`majorFishes`) | 공개 |
 | ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **해양: 실시간 예보 / 내륙: 하천 제원(하폭·유수폭·수심)** | 공개 |
 | ✅ | POST | `/api/spots/{spotId}/favorite` | 스팟 찜 추가(idempotent) | 보호 |
 | ✅ | DELETE | `/api/spots/{spotId}/favorite` | 스팟 찜 해제(idempotent) | 보호 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
+| ✅ | GET | `/api/banner/seasonal-fish` | 계절별 추천 어종(현재 월 계절 제철 어종 랜덤 3종 — `fishId`·`name`·`imageUrl`) | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
 | ✅ | POST | `/api/collections/classify` | 사진으로 어종 후보(Top-3) 분류. **저장 없음(순수 조회)** → `docs/external.md` §2 | 보호 |
 | ✅ | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) + 도감 기록 | 보호 |
@@ -212,6 +214,18 @@
 - 없는 스팟 추가 → `404 SPOT_NOT_FOUND`. 미인증 `401`.
 - 찜 = `favorite` 테이블 `(user_id, spot_id)` 1행(중복 불가) → ERD 참고.
 
+#### `GET /api/spots/popular` — 인기 스팟(조회수 Top3) ✅ (공개)
+
+누적 조회수(`spots.view_count`) **상위 3개**를 내림차순 반환. 홈/배너의 "인기 스팟" 노출용 공개 API. 각 항목에 좌표·분류·조회수 + **주요 대상 어종(`majorFishes`)** 포함.
+```jsonc
+// Response(data)
+[
+  { "id": 1, "name": "가거도", "lat": 34.07308, "lot": 125.08805,
+    "category": "해양", "viewCount": 128, "majorFishes": ["감성돔", "참돔"] }
+]
+```
+- `viewCount` 내림차순. 스팟이 3개 미만이면 있는 만큼 반환.
+
 #### `GET /api/spots/{id}` — 스팟 상세 ✅
 
 DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분류별 상세**를 병합한다. 분류별 상세는 `category`에 따라 **배타적**이다.
@@ -223,6 +237,8 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
 
 `forecast`는 **오늘 날짜(KST) + 현재 시각의 오전/오후 1건**(단일 객체). 서버가 `predcYmd == 오늘` 且 `predcNoonSeCd == 오전|오후`(현재 시각 0~11시=오전, 12시~=오후)로 필터한다.
 
+`viewCount`(누적 조회수)는 이 상세 조회 시 **사용자/IP별 1일 1회** 비동기로 증가한다(GET 비차단, `@Async`). Redis dedup 키 `spot:view:dedup:{spotId}:{userId|ip}` TTL 24h — 처음 조회면 증가, 24h 내 재조회는 무시(로그인=userId / 비로그인=IP). 증가는 원자적 `UPDATE spots SET view_count = view_count + 1`. 목록(`GET /api/spots`)은 집계 대상이 아니다.
+
 ```jsonc
 // Response(data)
 {
@@ -232,6 +248,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   "lot": 125.08805,
   "prohibit": false,
   "category": "해양",
+  "viewCount": 128,
   "majorFishes": ["감성돔", "참돔"],
   "forecast": {
     "predcYmd": "2026-08-19", "predcNoonSeCd": "오전",
@@ -256,6 +273,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   "lot": 126.6797,
   "prohibit": false,
   "category": "내륙",
+  "viewCount": 42,
   "majorFishes": ["붕어", "잉어", "피라미"],
   "forecast": null,                     // 내륙 스팟은 항상 null
   "inlandDetail": {
@@ -297,6 +315,32 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
 ```
 
 > `description`·`habitat`은 콘텐츠 시드(`data/fish/fish_content_seed.json`)로 채워진다 → 아래 "어종 도감 콘텐츠 시드". `imageUrl`·`rarity`는 아직 큐레이션 전이라 `null`로 응답된다.
+
+### 배너 (`/api/banner`) ✅
+
+홈 배너 콘텐츠. 현재는 "계절별 추천 어종" 하나이며, 추후 배너 항목이 늘면 이 베이스 경로에 추가한다.
+
+#### `GET /api/banner/seasonal-fish` — 계절별 추천 어종 ✅ (공개)
+
+서버의 **현재 월(KST)이 속한 계절**에 제철인 어종 중 **랜덤 3종**을 반환한다. 인증 불필요(홈 노출용 공개 API). 매 호출마다 셔플되어 순서·구성이 달라질 수 있다.
+
+- **계절 기준(월):** 봄 3~5월 · 여름 6~8월 · 가을 9~11월 · 겨울 12~2월. 판정은 `Season.of(month)`(fish 도메인), 현재 계절·랜덤 선택은 `BannerService`.
+- **후보 조회:** `FishService.getFishInSeason(Season)`이 해당 계절 제철 어종 전체(`fishes`의 계절 boolean 플래그 매칭)를 반환하고, 배너 서비스가 셔플 후 최대 3종으로 자른다.
+- **개수 부족 허용:** 제철 어종이 3종 미만이면 있는 만큼만 반환한다(빈 배열 가능, 예외 아님). 현재 시드는 계절당 11~21종이라 항상 3종이 채워진다.
+- `imageUrl`은 도감 이미지 큐레이션 전이라 현재 `null`로 응답된다.
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": [
+    { "fishId": 9, "name": "갈치", "imageUrl": null },
+    { "fishId": 3, "name": "돌돔", "imageUrl": null },
+    { "fishId": 17, "name": "쏘가리", "imageUrl": null }
+  ]
+}
+```
 
 ### 그 외 엔드포인트
 📋 TBD — 나머지 엔드포인트별 요청/응답 예시(JSON)와 유효성 규칙을 여기에 기록.
@@ -454,7 +498,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 |---|---|
 | 시드 파일 | `data/fish/fish_content_seed.json` (프로젝트 루트 `data/`, 서브모듈 아님) |
 | 경로 프로퍼티 | `fishlog.seed.fish-content-location` (기본 `file:data/fish/fish_content_seed.json`) |
-| 스키마 | `{ "fishes": [ { "name", "habitat", "description", "rarity" } ] }` — `name`이 `fishes.name`(UNIQUE)과 매칭되는 키 |
+| 스키마 | `{ "fishes": [ { "name", "habitat", "description", "rarity", "seasons" } ] }` — `name`이 `fishes.name`(UNIQUE)과 매칭되는 키. `seasons`는 `"봄"/"여름"/"가을"/"겨울"` 배열(제철, 아래 참고) |
 | 대상 | 확정 24종 (위 "스팟·어종 확정 데이터셋"과 동일 목록). `기타어종`·`-`는 시드에 없음 |
 | 실행 시점 | `SeedDataInitializer`가 **스팟 시드 다음에** 호출 (어종 행이 먼저 존재해야 하므로) |
 | 활성 조건 | `fishlog.seed.enabled=true` (= 로컬 전용, 운영은 Flyway 트랙) |
@@ -462,6 +506,9 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 **설계 결정 사항**
 - **`habitat` 값 집합 ✅:** 확정 24종 기준 `바다`(14)·`강`(4)·`저수지`(4)·`하천`(2) 4가지. 담수 어종이 들어오면서 이 컬럼이 실제 의미를 갖게 됐다. 값 집합이 닫혀 있으므로 enum 화는 📋 TBD(현재는 `String`).
 - **`rarity` 값 집합 ✅:** `low`(12)·`usually`(10)·`high`(2). `FishContentSeedLoader.parseRarity()`가 대소문자 무관하게 `Rarity` enum 으로 변환하며, 비었거나 알 수 없는 값은 `null`.
+- **`seasons` = 제철(계절) 다중값 ✅:** 한 어종이 여러 계절에 제철일 수 있어 `fishes`에 **계절별 boolean 4컬럼**(`season_spring`·`season_summer`·`season_fall`·`season_winter`)으로 저장한다(별도 테이블 없음). 시드의 `"봄/여름/가을/겨울"` 배열을 `FishContentSeedLoader.applySeasons()`가 각 boolean으로 매핑하고, 배열에 없는 계절은 `false`. 배너 "계절별 추천 어종"(`GET /api/banner/seasonal-fish`)이 이 플래그로 현재 계절 제철 어종을 고른다.
+  - **컬럼 추가 방식 ✅:** `@ColumnDefault("false")`라 `ddl-auto=update`가 NOT NULL 컬럼을 기본값 `false`로 추가하므로 **기존 행 수동 마이그레이션이 불필요**하다. 값은 다음 기동의 콘텐츠 시드 덮어쓰기로 채워진다.
+  - **어종 시즌 vs 스팟×어종 시즌 구분 ✅:** 여기 `seasons`는 **어종 자체의 제철**(도감 속성)이다. 스팟에서 그 어종이 잡히는 시기(`major_fish.season`)는 개념·출처가 다른 별개 값으로 아직 **TBD**(위 "스팟 데이터 설계" 참고).
 - **`SpotSeedLoader`와 분리 ✅(확정):** 스팟 매핑(`major_fish`)과 도감 콘텐츠는 갱신 주기·출처가 다르다. 또 `SpotSeedLoader`는 어종을 **없을 때만 insert** 하므로, 콘텐츠를 거기에 얹으면 기존 행이 갱신되지 않는다. 콘텐츠 로더는 매 기동 실행되며 **기존 행을 update** 한다(`Fish.applyContent()` + JPA dirty checking, `save()` 호출 없음).
 - **적용 정책 = 항상 덮어쓰기 ✅(확정):** JSON이 도감 콘텐츠의 **단일 진실 공급원**. 기동 때마다 시드 값으로 덮어쓰므로 JSON 수정 → 재시작만으로 반영된다. 값이 같으면 Hibernate가 UPDATE를 생략하므로 반복 비용은 없다.
   - **트레이드오프:** DB에서 직접 수정한 콘텐츠는 **다음 기동에 사라진다.** 관리자 편집 기능을 도입하면 이 정책을 재검토해야 한다 📋.
@@ -506,11 +553,18 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ### `GET /api/collections` — 특정 어종의 내 인증 요약 ✅ (보호)
 
-특정 어종에 대해 내가 인증한 **사진 목록 + 잡은 횟수**를 반환한다. 도감에서 어종(그림자/컬러)을 눌렀을 때의 상세용.
+특정 어종에 대해 내가 인증한 **최근 사진(최대 4장) + 잡은 총 횟수 + 그 어종의 서식지**를 반환한다. 도감에서 어종(그림자/컬러)을 눌렀을 때의 상세용.
+
+화면은 **썸네일 4칸을 깔고, 누르면 오버레이로 사진을 키우면서 그때 입력한 크기·위치를 함께 보여주는** 구조다. 그래서 사진을 URL 문자열 배열이 아니라 **객체 배열**로 내려준다 — 크기·위치는 사진마다 다른 값이라, URL만 주면 클라이언트가 인덱스를 맞춰 다른 배열과 짝지어야 한다.
 
 - **인증 필요:** `Authorization: Bearer {accessToken}`. 사용자 신원은 **토큰에서 얻으며 `userId` 파라미터는 없다**(남의 도감 조회 차단). 토큰 누락·무효 시 `401`.
 - 파라미터: `fishId`(전체 도감 어종 id).
-- 안 잡은 어종이어도 **404가 아니라 200 + `catchCount:0`·`imageUrls:[]`** — 어종은 도감에 존재하고 "0번 잡음"이 맞기 때문(단건 리소스 조회인 `GET /api/fish/{id}`의 404와 다름).
+- 안 잡은 어종이어도 **404가 아니라 200 + `catchCount:0`·`imageUrls:[]`** — 어종은 도감에 존재하고 "0번 잡음"이 맞기 때문.
+- **사진은 최신순 최대 4장만 내려준다 ✅(확정).** 썸네일이 4칸이라 그 이상은 그리지 않고, 인증을 수백 번 한 어종에서 응답이 무한정 커지는 것도 막는다. 4장 미만이면 있는 만큼만 온다(0장이면 빈 배열). 정렬은 `createdAt DESC, id DESC` — `createdAt`이 동점일 때 순서가 매 조회마다 뒤바뀌지 않도록 id로 동점을 깬다. 전체 사진을 받는 별도 엔드포인트는 📋 TBD.
+- ⚠️ **`catchCount`는 자르지 않은 전체 횟수다.** 사진만 4장으로 제한되므로 `catchCount:7` + `recentCatches` 4개가 정상이다. 그래서 총 횟수는 리스트 크기가 아니라 `COUNT` 쿼리로 따로 센다. 남은 장수는 `catchCount - recentCatches.length`로 계산해 "+N장 더" 배지를 그릴 수 있다.
+- **각 사진 항목은 오버레이에 필요한 값을 전부 담는다** — `imageUrl`·`size`(그때 기록한 cm)·`location`(그때 수기 입력한 위치, 미입력 시 `null`)·`verifiedAt`. 오버레이를 띄울 때 추가 조회가 필요 없다. `verifiedAt`은 촬영 시각이 아니라 **서버에 인증이 등록된 시각**이다(EXIF를 읽지 않음).
+- **`habitat`(서식지)를 함께 내려준다 ✅.** 인증 기록이 아니라 **어종의 속성**이라 `catchCount:0`이어도 채워진다. 그래서 서비스는 기록 조회와 별개로 어종을 먼저 조회한다 — 기록이 0건이면 거기서 서식지를 끌어올 수 없기 때문이다.
+- ⚠️ **위 어종 조회 때문에 도감에 없는 `fishId`는 `F001(404)`가 된다.** 과거에는 빈 결과(`catchCount:0`)로 나갔다. "어종이 없음"(404)과 "어종은 있는데 안 잡음"(200)을 구분하게 된 것이며, 후자는 종전과 동일하다.
 
 요청: `GET /api/collections?fishId=1`
 
@@ -520,11 +574,23 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
   "code": 200,
   "message": "요청이 성공적으로 처리되었습니다.",
   "data": {
-    "catchCount": 3,
-    "imageUrls": [
-      "https://.../photo1.jpg",
-      "https://.../photo2.jpg",
-      "https://.../photo3.jpg"
+    "habitat": "바다",
+    "catchCount": 7,
+    "recentCatches": [
+      {
+        "catchRecordId": 42,
+        "imageUrl": "https://.../fish/uuid1.jpg",
+        "size": 31.0,
+        "location": "격포항 방파제",
+        "verifiedAt": "2026-09-01T14:32:10"
+      },
+      {
+        "catchRecordId": 39,
+        "imageUrl": "https://.../fish/uuid2.jpg",
+        "size": 27.5,
+        "location": null,
+        "verifiedAt": "2026-08-24T08:11:02"
+      }
     ]
   }
 }
@@ -579,13 +645,14 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 #### ② `POST /api/collections/verify` — 어종 인증(도감 기록) ✅ (보호)
 
-`multipart/form-data`로 `image`(사진) + `fishId`(확정 어종) + `size`(cm)를 전송. S3 `fish/` 경로에 업로드하고 `catch_record` 1행을 생성한다.
+`multipart/form-data`로 `image`(사진) + `fishId`(확정 어종) + `size`(cm) + `location`(잡은 위치, 선택)을 전송. S3 `fish/` 경로에 업로드하고 `catch_record` 1행을 생성한다.
 
 ```jsonc
 // Request: multipart/form-data
-//   image:  (이미지 파일, 최대 5MB)
-//   fishId: 15
-//   size:   27.5
+//   image:    (이미지 파일, 최대 5MB)
+//   fishId:   15
+//   size:     27.5
+//   location: "충주호 종댕이길 선착장"   // 선택 — 잡은 위치 수기 입력
 
 // Response(data)
 {
@@ -594,6 +661,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
   "fishName": "붕어",
   "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
   "size": 27.5,
+  "location": "충주호 종댕이길 선착장",  // 미입력 시 null
   "firstCatch": true,   // 이 어종을 처음 잡음 → 도감 새 칸 획득 연출
   "catchCount": 1       // 이번 인증 포함 총 횟수
 }
@@ -601,9 +669,12 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 - 사용자 신원은 토큰에서 얻는다(`userId` 파라미터 없음).
 - `size`는 **필수**이며 `0 < size <= 300`(cm). 크기 랭킹(`GET /api/rankings/size`)의 기준값이라 NOT NULL이고, 상한은 오타·장난 입력이 랭킹을 장악하는 것을 막는 가드다.
+- **`location`(잡은 위치)은 선택 입력이며 사용자가 직접 적는 자유 텍스트다 ✅(확정).** 스팟 목록에서 고르는 것이 아니다 — 개인 포인트·유료 낚시터처럼 `spots`에 없는 장소가 인증의 상당수라, 등록된 스팟만 고르게 하면 위치를 아예 못 남기는 기록이 생긴다. `spot_id` 연결(TBD)은 이 컬럼을 대체하는 것이 아니라 **함께** 갖게 될 값이다.
+  - 최대 100자(`C003`). 앞뒤 공백은 제거하고, 공백만 입력하면 미입력과 동일하게 `null`로 저장한다 — "빈 문자열"과 "미입력" 두 가지 빈 값이 섞이지 않게 하기 위함.
+  - **nullable인 이유:** 이미 쌓인 인증 기록에는 위치가 없고, 운영 프로파일이 `ddl-auto=update`라 값이 있는 테이블에 NOT NULL 컬럼을 뒤늦게 붙일 수 없다.
 - `firstCatch`·`catchCount`는 저장된 컬럼이 아니라 (user, fish) 행 **집계에서 파생**한다(옵션 B).
 - **업로드 후 DB 저장이 실패하면 S3 객체를 보상 삭제**한다(고아 객체 방지). 저장은 `saveAndFlush`로 제약 위반을 커밋 전에 드러낸다.
-- 오류: 크기 이상 `C001·C002(400)`, 어종 미존재 `F001(404)`, 사진 문제 `S001~S003(400)`, 업로드 실패 `S004(500)`, 용량 초과 `413`.
+- 오류: 크기 이상 `C001·C002(400)`, 위치 길이 초과 `C003(400)`, 어종 미존재 `F001(404)`, 사진 문제 `S001~S003(400)`, 업로드 실패 `S004(500)`, 용량 초과 `413`.
 
 > **이미지 크기 한도는 5MB 한 곳에서 관리된다 ✅.** `S3Service.MAX_IMAGE_SIZE`를 분류 경로도 함께 쓰므로 "분류는 성공했는데 저장이 실패"하는 흐름이 없다. 컨테이너 한도(`spring.servlet.multipart.max-file-size=10MB`)는 그보다 느슨하게 둬서, 초과분이 500이 아니라 **413 + 명확한 메시지**로 나가게 한다.
 
@@ -613,7 +684,9 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 - **인증 필요:** `Authorization: Bearer {accessToken}`. 파라미터 없음(신원은 토큰).
 - `caught=true`면 도감 이미지(`imageUrl`), `false`면 같은 이미지를 그림자(실루엣)로 렌더한다. **그림자는 클라이언트 이펙트**라 서버는 플래그만 내려준다.
+- **어종별 "잡은 횟수"는 이 응답에 담지 않는다 ✅(확정).** 그리드는 획득/미획득만 그리고, 칸을 눌렀을 때 `GET /api/collections?fishId=`가 `catchCount`·`imageUrls`를 준다. 그리드가 쓰지 않는 값을 전체 어종 수만큼 실어 보내지 않기 위한 분리이며, 나중에 칸에 횟수 배지를 띄우기로 하면 그때 `GROUP BY fishes_id` 집계를 덧입히면 된다(쿼리 수는 그대로 1회).
 - `totalCount`/`caughtCount`는 도감 완성도(랭킹의 분모/분자)와 같은 값이라, 이 응답만으로 진행도까지 그릴 수 있다 → `docs/ranking.md`.
+- **`habitat`(서식지)를 칸마다 함께 내려준다 ✅** — `바다`/`강`/`저수지`/`하천`. 도감을 서식지별 탭·그룹으로 묶기 위한 값으로, `fishes.habitat`(콘텐츠 시드가 적재)을 그대로 노출한다. 시드에 값이 없는 어종은 `null`일 수 있어 클라이언트가 "기타"로 처리해야 한다. ⚠️ 이 값은 **어종 기준**이며 스팟의 `category`(해양/내륙)와 1:1이 아니다(위 "어종 도감 콘텐츠 시드" 참고).
 
 ```json
 {
@@ -624,8 +697,8 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
     "totalCount": 24,
     "caughtCount": 12,
     "fishes": [
-      { "id": 1, "name": "감성돔", "imageUrl": null, "rarity": "USUALLY", "caught": true },
-      { "id": 2, "name": "농어", "imageUrl": null, "rarity": "USUALLY", "caught": false }
+      { "id": 1, "name": "감성돔", "imageUrl": null, "rarity": "USUALLY", "habitat": "바다", "caught": true },
+      { "id": 2, "name": "붕어", "imageUrl": null, "rarity": "LOW", "habitat": "저수지", "caught": false }
     ]
   }
 }
@@ -647,7 +720,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `users` | 사용자 | `id`, `username`(email, UNIQUE), `password_hash`, `nickname`(UNIQUE), `profile_image_url`(nullable) |
 | `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
-| `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(어느 스팟에서 인증)는 추후 추가(TBD) |
+| `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준), `catch_location`(잡은 위치 **수기 입력**, VARCHAR(100)·nullable). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(등록 스팟과의 연결)는 추후 추가(TBD) — `catch_location`을 대체하지 않고 병존 |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit`, `category`(ENUM 해양/내륙) |
 | `favorite` | 스팟 찜(사용자↔스팟 N:M) | `id`, `user_id`(plain Long), `spot_id`(plain Long), **UNIQUE(user_id, spot_id)**, `created_at`(찜 시각) |
 | `inland_spot_detail` | 내륙(담수) 스팟의 하천 제원 — `spots`와 **1:1** | `spot_id`(PK=FK), `river_width_min/max`(하폭), `flow_width_min/max`(유수폭), `depth_min/max`(수심). 단위 m, 각 값 nullable |
@@ -678,8 +751,10 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `lot` | DOUBLE | NOT NULL | 경도 | API `lot` |
 | `prohibit` | BOOLEAN | NOT NULL | 낚시 금지 여부(기본 false) | 서비스 운영값(API 아님) |
 | `category` | ENUM(STRING) | nullable | 분류 **해양/내륙** | 시드 `category`(바다→해양·담수→내륙) |
+| `view_count` | BIGINT | NOT NULL, DEFAULT 0 | 상세 조회 누적수 | 서비스 집계(상세 조회 시 사용자/IP 1일 1회 비동기 증가) |
 
 - 현재 **92행**(확정 데이터셋: 해양 49/내륙 43 — 실측 상세가 없는 담수 6곳 제외). `name`에 **UNIQUE 확정**(엔티티 `@Column(unique = true)`) — 시드 upsert 기준 키로 사용.
+- `view_count`는 `@ColumnDefault("0")`라 기존 행도 0으로 채워지고 `ddl-auto=update`가 컬럼을 자동 추가한다(마이그레이션 불필요). 조회수 증가는 `@Async` + 원자적 `UPDATE`, 중복은 Redis dedup(`spot:view:dedup:*`, TTL 24h).
 - 좌표는 ERD v0.1의 FLOAT 대신 **`double`로 매핑**(위경도 소수 5자리 정밀도 보존).
 - `category`(`SpotCategory` enum 해양/내륙)는 `@Enumerated(STRING)`로 저장(값 "해양"/"내륙"). `ddl-auto=update`가 컬럼을 자동 추가하고, 기존 행은 재기동 시 시드가 backfill하므로 nullable. **상세 조회에서 해양=실시간 예보 병합 / 내륙=하천 제원(`inland_spot_detail`) 병합** 분기 기준이다.
 - 예보성 필드(낚시지수·날씨·물때)는 저장하지 않고 상세 조회 시 실시간 호출 → 위 "스팟 데이터 설계" 참고.
@@ -720,5 +795,5 @@ User(users) 1 ──< catch_record >── 1 Fish(fishes)   # 사용자 도감(�
 Spot(spots) 1 ──< major_fish >── 1 Fish(fishes)     # 스팟-어종 매핑
 User(users) 1 ──< favorite >── 1 Spot(spots)        # 스팟 찜(N:M, (user_id,spot_id) UNIQUE)
 # favorite/catch_record 의 user_id·spot_id 는 plain Long(FK 미승격 → docs/auth-followup.md)
-# (spot_id 로 "어느 스팟에서 인증했는지"는 추후 catch_record 에 추가 — 현재 미포함)
+# (등록 스팟과의 연결(spot_id)은 추후 catch_record 에 추가 — 현재는 자유 텍스트 catch_location 만 있음)
 ```

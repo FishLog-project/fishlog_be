@@ -51,8 +51,9 @@ public class CollectionController implements CollectionControllerSpec {
       @AuthenticationPrincipal Long userId,
       @RequestParam Long fishId,
       @RequestParam Double size,
+      @RequestParam(required = false) String location,
       @RequestPart("image") MultipartFile image) {
     return BaseResponse.success(
-        "어종 인증이 완료되었습니다.", collectionService.verify(userId, fishId, size, image));
+        "어종 인증이 완료되었습니다.", collectionService.verify(userId, fishId, size, location, image));
   }
 }

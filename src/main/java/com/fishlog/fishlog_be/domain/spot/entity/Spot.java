@@ -13,6 +13,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.ColumnDefault;
 
 /**
  * 낚시 스팟 — 바다낚시지수 API(15142486)에서 수집한 **불변 정보**만 저장한다.
@@ -54,6 +55,14 @@ public class Spot extends BaseTimeEntity {
   @Enumerated(EnumType.STRING)
   @Column
   private SpotCategory category;
+
+  /**
+   * 스팟 상세 조회수. 상세 조회(`GET /api/spots/{id}`) 시 비동기·원자적으로 증가(중복 집계는 Redis dedup으로 방지).
+   * {@code @ColumnDefault("0")}로 기존 행도 0으로 채워진다(ddl-auto=update). → docs/spec.md
+   */
+  @Column(nullable = false)
+  @ColumnDefault("0")
+  private long viewCount;
 
   /** 카테고리 재설정(시드 재적재 시 기존 행 갱신). setter 대신 도메인 메서드. */
   public void applyCategory(SpotCategory category) {

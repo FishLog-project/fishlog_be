@@ -29,26 +29,29 @@ com.fishlog.fishlog_be
 │  ├─ fish                       # 어종 전체 도감(마스터 카탈로그)
 │  │  ├─ controller/FishController.java     # GET /api/fish/{id} (상세만 공개; 목록은 제거, dex가 대체)
 │  │  ├─ service/FishService.java · FishServiceImpl.java
-│  │  ├─ dto/FishListResponse.java · FishSummaryResponse.java · FishDetailResponse.java
-│  │  ├─ entity/Fish.java · Rarity.java
+│  │  ├─ dto/FishListResponse.java · FishSummaryResponse.java · FishDetailResponse.java · SeasonalFishResponse.java(배너용 name·imageUrl)
+│  │  ├─ entity/Fish.java · Rarity.java · Season.java(월→계절·제철 플래그 매칭)
 │  │  ├─ repository/FishRepository.java
 │  │  └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
 │  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행
 │  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex · POST /classify, /verify (모두 보호)
 │  │  ├─ service/CollectionService.java · CollectionServiceImpl.java
-│  │  ├─ dto/CatchRecordResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
+│  │  ├─ dto/CatchRecordResponse · CatchPhotoResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
 │  │  ├─ entity/CatchRecord.java
-│  │  ├─ exception/CollectionErrorCode.java            # C001~C002 (크기 검증)
+│  │  ├─ exception/CollectionErrorCode.java            # C001~C003 (크기·잡은 위치 검증)
 │  │  └─ repository/CatchRecordRepository.java · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
 │  ├─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
 │  │  ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
 │  │  ├─ service/RankingService.java · RankingServiceImpl.java
 │  │  └─ dto/RankingResponse.java · RankingEntryResponse.java · RankingType.java
-│  └─ favorite                   # 스팟 찜(사용자↔스팟 N:M, favorite 테이블)
-│     ├─ controller/FavoriteController.java (+Spec)  # POST/DELETE /api/spots/{spotId}/favorite (보호)
-│     ├─ service/FavoriteService.java · FavoriteServiceImpl.java  # 추가·해제·찜 spotId 집합·탈퇴 정리
-│     ├─ entity/Favorite.java  repository/FavoriteRepository.java  # UNIQUE(user_id, spot_id)
-│     └─ (예외 없음 — 스팟 미존재는 SpotErrorCode.SPOT_NOT_FOUND 재사용)
+│  ├─ favorite                   # 스팟 찜(사용자↔스팟 N:M, favorite 테이블)
+│  │  ├─ controller/FavoriteController.java (+Spec)  # POST/DELETE /api/spots/{spotId}/favorite (보호)
+│  │  ├─ service/FavoriteService.java · FavoriteServiceImpl.java  # 추가·해제·찜 spotId 집합·탈퇴 정리
+│  │  ├─ entity/Favorite.java  repository/FavoriteRepository.java  # UNIQUE(user_id, spot_id)
+│  │  └─ (예외 없음 — 스팟 미존재는 SpotErrorCode.SPOT_NOT_FOUND 재사용)
+│  └─ banner                     # 홈 배너 콘텐츠(전용 테이블 없음 — fish 도메인 조합)
+│     ├─ controller/BannerController.java (+Spec)  # GET /api/banner/seasonal-fish (공개)
+│     └─ service/BannerService.java · BannerServiceImpl.java  # 현재 월(KST)→계절 판정 + 제철 어종 랜덤 3선(FishService.getFishInSeason 경유)
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
@@ -118,6 +121,7 @@ domain
 ├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드
 ├─ ranking                  # 사용자 랭킹 (→ docs/ranking.md)                 ✅
 ├─ favorite                 # 스팟 찜 (사용자↔스팟 N:M)                       ✅
+├─ banner                   # 홈 배너 (계절별 추천 어종 — fish 조합, 전용 테이블 없음) ✅
 └─ tour                     # 주변 관광 시설 (외부 연동 → docs/external.md)     📋
 ```
 

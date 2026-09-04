@@ -3,6 +3,7 @@ package com.fishlog.fishlog_be.domain.spot.service;
 import com.fishlog.fishlog_be.domain.favorite.service.FavoriteService;
 import com.fishlog.fishlog_be.domain.spot.dto.ForecastResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.InlandDetailResponse;
+import com.fishlog.fishlog_be.domain.spot.dto.PopularSpotResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
 import com.fishlog.fishlog_be.domain.spot.entity.MajorFish;
@@ -62,6 +63,14 @@ public class SpotServiceImpl implements SpotService {
         .toList();
   }
 
+  /** 조회수 상위 3개 인기 스팟(내림차순). 각 스팟의 주요 대상 어종을 함께 담는다(스팟 3개 고정이라 쿼리 부담 작음). */
+  @Override
+  public List<PopularSpotResponse> getPopularSpots() {
+    return spotRepository.findTop3ByOrderByViewCountDesc().stream()
+        .map(spot -> PopularSpotResponse.of(spot, majorFishNames(spot)))
+        .toList();
+  }
+
   @Override
   public SpotDetailResponse getSpotDetail(Long id) {
     Spot spot =
@@ -69,11 +78,7 @@ public class SpotServiceImpl implements SpotService {
             .findById(id)
             .orElseThrow(() -> new CustomException(SpotErrorCode.SPOT_NOT_FOUND));
 
-    List<String> majorFishes =
-        majorFishRepository.findBySpot(spot).stream()
-            .map(MajorFish::getFish)
-            .map(f -> f.getName())
-            .toList();
+    List<String> majorFishes = majorFishNames(spot);
 
     // 분류별 상세는 배타적이다: 해양=실시간 예보, 내륙=하천 제원(실측 저장값).
     // 예보는 오늘 날짜(KST) + 현재 시각의 오전/오후 1건만 노출한다.
@@ -89,9 +94,18 @@ public class SpotServiceImpl implements SpotService {
         spot.getLot(),
         spot.isProhibit(),
         spot.getCategory(),
+        spot.getViewCount(),
         majorFishes,
         forecast,
         inlandDetail);
+  }
+
+  /** 스팟의 주요 대상 어종명 목록(major_fish 매핑). 상세·인기 스팟 응답 공용. */
+  private List<String> majorFishNames(Spot spot) {
+    return majorFishRepository.findBySpot(spot).stream()
+        .map(MajorFish::getFish)
+        .map(f -> f.getName())
+        .toList();
   }
 
   /**

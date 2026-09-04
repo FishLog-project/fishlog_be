@@ -2,6 +2,7 @@ package com.fishlog.fishlog_be.domain.collection.repository;
 
 import com.fishlog.fishlog_be.domain.collection.entity.CatchRecord;
 import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,12 +10,16 @@ import org.springframework.data.repository.query.Param;
 public interface CatchRecordRepository extends JpaRepository<CatchRecord, Long> {
 
   /**
-   * 특정 사용자가 특정 어종을 인증한 기록 전체.
+   * 특정 사용자가 특정 어종을 인증한 기록을 <b>최신순으로</b> 조회한다. 도감 상세가 최근 사진 몇 장만 보여주므로 전체를 가져오지 않고 {@code Pageable}로
+   * 개수를 제한한다(사진이 수백 장이어도 응답 크기가 고정된다).
    *
-   * <p>옵션 B: 잡은 횟수 = 반환 리스트 크기, 사진 목록 = 각 행의 certifiedImageUrl. {@code fish}는 연관관계라 프로퍼티 경로 {@code
-   * Fish_Id}로 탐색한다(=fish.id).
+   * <p>정렬에 {@code Id DESC}를 덧붙인 이유: {@code createdAt}이 같은 순간의 기록끼리는 순서가 DB 구현에 맡겨져, 새로고침할 때마다 사진
+   * 순서가 뒤바뀔 수 있다. id 는 단조 증가라 동점을 결정적으로 깬다.
+   *
+   * <p>{@code fish}는 연관관계라 프로퍼티 경로 {@code Fish_Id}로 탐색한다(=fish.id).
    */
-  List<CatchRecord> findByUserIdAndFish_Id(Long userId, Long fishId);
+  List<CatchRecord> findByUserIdAndFish_IdOrderByCreatedAtDescIdDesc(
+      Long userId, Long fishId, Pageable pageable);
 
   /**
    * 특정 사용자가 특정 어종을 인증한 횟수.
