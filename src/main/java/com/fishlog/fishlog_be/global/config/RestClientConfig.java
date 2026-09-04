@@ -26,6 +26,12 @@ public class RestClientConfig {
   @Value("${external.fish-classify.read-timeout-ms:5000}")
   private long classifyReadTimeoutMs;
 
+  @Value("${external.tour.connect-timeout-ms:2000}")
+  private long tourConnectTimeoutMs;
+
+  @Value("${external.tour.read-timeout-ms:5000}")
+  private long tourReadTimeoutMs;
+
   @Bean
   public RestClient fishingIndexRestClient() {
     return RestClient.builder()
@@ -41,6 +47,14 @@ public class RestClientConfig {
   public RestClient fishClassifyRestClient() {
     return RestClient.builder()
         .requestFactory(requestFactory(classifyConnectTimeoutMs, classifyReadTimeoutMs))
+        .build();
+  }
+
+  /** 관광 정보(TourAPI) 전용. 외부 지연이 관광 조회 응답을 오래 붙잡지 않도록 connect 2s/read 5s. */
+  @Bean
+  public RestClient tourApiRestClient() {
+    return RestClient.builder()
+        .requestFactory(requestFactory(tourConnectTimeoutMs, tourReadTimeoutMs))
         .build();
   }
 
