@@ -30,6 +30,21 @@ public interface CatchRecordRepository extends JpaRepository<CatchRecord, Long> 
   long countByUserIdAndFish_Id(Long userId, Long fishId);
 
   /**
+   * 특정 사용자가 특정 어종을 잡은 <b>횟수와 최대 크기</b>를 한 번에 집계한다.
+   *
+   * <p>도감 상세 조회가 쓰는 경로다. 사진은 최근 4장만 내려주므로 응답 리스트로는 전체 횟수도 최대 크기도 계산할 수 없고, 둘 다 같은 조건의 기록 전체를 훑어야
+   * 나오는 값이라 {@code COUNT}와 {@code MAX}를 한 쿼리로 묶었다.
+   *
+   * <p>기록이 없어도 행 하나가 돌아온다({@code catchCount} 0, {@code maxSize} {@code null}) — "안 잡은 어종"은 예외가 아니라
+   * 정상 응답이기 때문이다. 인증 직후 횟수만 필요한 곳은 {@link #countByUserIdAndFish_Id(Long, Long)}를 그대로 쓴다.
+   */
+  @Query(
+      "SELECT COUNT(c) AS catchCount, MAX(c.size) AS maxSize "
+          + "FROM CatchRecord c "
+          + "WHERE c.userId = :userId AND c.fish.id = :fishId")
+  CatchStats findStatsByUserIdAndFishId(@Param("userId") Long userId, @Param("fishId") Long fishId);
+
+  /**
    * 특정 어종에 대한 인증 기록 존재 여부.
    *
    * <p>시드에서 빠진 어종을 물리 삭제해도 되는지 판단하는 가드다. 기록이 하나라도 있으면 사용자 데이터가 사라지므로 삭제하지 않고 논리 삭제로 남긴다. → {@code

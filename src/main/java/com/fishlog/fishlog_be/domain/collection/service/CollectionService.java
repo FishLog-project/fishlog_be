@@ -34,9 +34,10 @@ public interface CollectionService {
   MyDexResponse getMyDex(Long userId);
 
   /**
-   * 회원탈퇴 등으로 해당 사용자의 모든 도감 인증 기록을 삭제한다.
+   * 회원탈퇴 등으로 해당 사용자의 모든 도감 기록을 삭제한다(도감 인증 + 도감 외 어종).
    *
-   * <p>다른 도메인(user)의 회원탈퇴 흐름에서 도메인 경계를 지켜 호출하기 위한 진입점이다.
+   * <p>다른 도메인(user)의 회원탈퇴 흐름에서 도메인 경계를 지켜 호출하기 위한 진입점이다. 정리 대상 테이블이 늘어도 <b>호출부는 이 메서드 하나만</b> 알면
+   * 되도록, 도감 외 어종({@code custom_catch_record}) 정리는 여기서 {@link CustomCatchService}로 위임한다.
    *
    * @param userId 삭제 대상 사용자 id
    */
