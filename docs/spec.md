@@ -30,9 +30,12 @@
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/banner/seasonal-fish` | 계절별 추천 어종(현재 월 계절 제철 어종 랜덤 3종 — `fishId`·`name`·`imageUrl`) | 공개 |
 | ✅ | GET | `/api/tours/nearby` | 현재 위치 주변 관광 장소(관광지/숙박/음식점 — `type`·`lat`·`lng`·`radius`·`page`, 거리순 30개) | 공개 |
-| ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수 + 인증 사진 URL 목록). `fishId` 파라미터 | 보호 |
+| ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수·최대 크기 + 인증 사진 목록). `fishId` 파라미터 | 보호 |
 | ✅ | POST | `/api/collections/classify` | 사진으로 어종 후보(Top-3) 분류. **저장 없음(순수 조회)** → `docs/external.md` §2 | 보호 |
 | ✅ | POST | `/api/collections/verify` | 어종 사진 인증 업로드(S3) + 도감 기록 | 보호 |
+| ✅ | POST | `/api/collections/custom` | **도감 외 어종** 수기 등록(사진 + 어종명·서식지·크기·위치 직접 입력). 랭킹·도감 미반영 | 보호 |
+| ✅ | GET | `/api/collections/custom/dex` | 내 도감 외 어종 **전체** 조회(그리드 — 어종별 `catchCount`·`maxSize`) | 보호 |
+| ✅ | GET | `/api/collections/custom` | 도감 외 어종 **상세** 조회(잡은 횟수·최대 크기 + 사진 목록). `customFishId` 파라미터 | 보호 |
 | ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
 | ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 | ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
@@ -601,15 +604,19 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ### `GET /api/collections` — 특정 어종의 내 인증 요약 ✅ (보호)
 
-특정 어종에 대해 내가 인증한 **최근 사진(최대 4장) + 잡은 총 횟수 + 그 어종의 서식지**를 반환한다. 도감에서 어종(그림자/컬러)을 눌렀을 때의 상세용.
+특정 어종에 대해 내가 인증한 **최근 사진(최대 4장) + 잡은 총 횟수 + 최대 크기 + 그 어종의 서식지**를 반환한다. 도감에서 어종(그림자/컬러)을 눌렀을 때의 상세용.
 
 화면은 **썸네일 4칸을 깔고, 누르면 오버레이로 사진을 키우면서 그때 입력한 크기·위치를 함께 보여주는** 구조다. 그래서 사진을 URL 문자열 배열이 아니라 **객체 배열**로 내려준다 — 크기·위치는 사진마다 다른 값이라, URL만 주면 클라이언트가 인덱스를 맞춰 다른 배열과 짝지어야 한다.
 
 - **인증 필요:** `Authorization: Bearer {accessToken}`. 사용자 신원은 **토큰에서 얻으며 `userId` 파라미터는 없다**(남의 도감 조회 차단). 토큰 누락·무효 시 `401`.
 - 파라미터: `fishId`(전체 도감 어종 id).
-- 안 잡은 어종이어도 **404가 아니라 200 + `catchCount:0`·`imageUrls:[]`** — 어종은 도감에 존재하고 "0번 잡음"이 맞기 때문.
+- 안 잡은 어종이어도 **404가 아니라 200 + `catchCount:0`·`maxSize:null`·`recentCatches:[]`** — 어종은 도감에 존재하고 "0번 잡음"이 맞기 때문.
 - **사진은 최신순 최대 4장만 내려준다 ✅(확정).** 썸네일이 4칸이라 그 이상은 그리지 않고, 인증을 수백 번 한 어종에서 응답이 무한정 커지는 것도 막는다. 4장 미만이면 있는 만큼만 온다(0장이면 빈 배열). 정렬은 `createdAt DESC, id DESC` — `createdAt`이 동점일 때 순서가 매 조회마다 뒤바뀌지 않도록 id로 동점을 깬다. 전체 사진을 받는 별도 엔드포인트는 📋 TBD.
-- ⚠️ **`catchCount`는 자르지 않은 전체 횟수다.** 사진만 4장으로 제한되므로 `catchCount:7` + `recentCatches` 4개가 정상이다. 그래서 총 횟수는 리스트 크기가 아니라 `COUNT` 쿼리로 따로 센다. 남은 장수는 `catchCount - recentCatches.length`로 계산해 "+N장 더" 배지를 그릴 수 있다.
+- ⚠️ **`catchCount`·`maxSize`는 자르지 않은 전체 기록 기준이다.** 사진만 4장으로 제한되므로 `catchCount:7` + `recentCatches` 4개가 정상이다. 남은 장수는 `catchCount - recentCatches.length`로 계산해 "+N장 더" 배지를 그릴 수 있다.
+- **`maxSize`(최대 크기, cm) ✅** — 그 어종으로 기록한 크기 중 최댓값. 안 잡았으면 `null`.
+  - ⚠️ **응답에 온 `recentCatches` 4장에서 계산하면 안 된다.** 최대 크기가 잘려 나간 5번째 이후 기록에 있을 수 있어 값이 갈린다.
+  - 그래서 횟수와 최대 크기를 리스트가 아니라 **집계 쿼리 한 번**(`COUNT` + `MAX`, `CatchStats` 프로젝션)으로 받는다. 둘 다 같은 조건의 기록 전체를 훑어야 나오는 값이라 따로 세면 같은 스캔이 두 번 돈다.
+  - 크기 랭킹(`GET /api/rankings/size`)의 `MAX(size)`와는 **집계 범위가 다르다** — 랭킹은 사용자의 *모든 어종*을 통틀어, 이 값은 *그 어종 하나*를 대상으로 한다.
 - **각 사진 항목은 오버레이에 필요한 값을 전부 담는다** — `imageUrl`·`size`(그때 기록한 cm)·`location`(그때 수기 입력한 위치, 미입력 시 `null`)·`verifiedAt`. 오버레이를 띄울 때 추가 조회가 필요 없다. `verifiedAt`은 촬영 시각이 아니라 **서버에 인증이 등록된 시각**이다(EXIF를 읽지 않음).
 - **`habitat`(서식지)를 함께 내려준다 ✅.** 인증 기록이 아니라 **어종의 속성**이라 `catchCount:0`이어도 채워진다. 그래서 서비스는 기록 조회와 별개로 어종을 먼저 조회한다 — 기록이 0건이면 거기서 서식지를 끌어올 수 없기 때문이다.
 - ⚠️ **위 어종 조회 때문에 도감에 없는 `fishId`는 `F001(404)`가 된다.** 과거에는 빈 결과(`catchCount:0`)로 나갔다. "어종이 없음"(404)과 "어종은 있는데 안 잡음"(200)을 구분하게 된 것이며, 후자는 종전과 동일하다.
@@ -624,6 +631,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
   "data": {
     "habitat": "바다",
     "catchCount": 7,
+    "maxSize": 38.2,
     "recentCatches": [
       {
         "catchRecordId": 42,
@@ -726,6 +734,158 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 > **이미지 크기 한도는 5MB 한 곳에서 관리된다 ✅.** `S3Service.MAX_IMAGE_SIZE`를 분류 경로도 함께 쓰므로 "분류는 성공했는데 저장이 실패"하는 흐름이 없다. 컨테이너 한도(`spring.servlet.multipart.max-file-size=10MB`)는 그보다 느슨하게 둬서, 초과분이 500이 아니라 **413 + 명확한 메시지**로 나가게 한다.
 
+### `POST /api/collections/custom` — 도감 외 어종 수기 등록 ✅ (보호)
+
+도감(확정 24종)에 **없는 물고기**를 잡았을 때, 사진과 함께 **어종명·주요 서식지·크기·잡은 위치를 사용자가 직접 입력해** 남기는 기록이다. AI 분류를 타지 않는다 — 모델도 도감 24종만 아는 25클래스 분류기라, 그 밖의 물고기에는 애초에 쓸 수 있는 후보를 주지 못한다(`docs/external.md` §2). 어종명을 정하는 주체는 전적으로 사용자다.
+
+```jsonc
+// Request: multipart/form-data
+//   image:    (이미지 파일, 최대 5MB)
+//   fishName: "쏘가리"          // 필수 — 어종명 수기 입력
+//   habitat:  "강"              // 선택 — 주요 서식지 수기 입력
+//   size:     34.0             // 필수 — cm
+//   location: "한탄강 고석정"    // 선택 — 잡은 위치 수기 입력
+
+// Response(data)
+{
+  "customCatchRecordId": 7,   // 이번 기록 1건의 id
+  "customFishId": 3,          // 어종의 id — 상세 조회에 쓴다
+  "fishName": "쏘가리",
+  "habitat": "강",              // 미입력 시 null
+  "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/custom-fish/uuid.jpg",
+  "size": 34.0,
+  "location": "한탄강 고석정",   // 미입력 시 null
+  "registeredAt": "2026-09-05T14:32:10"
+}
+```
+
+#### 어종은 이름으로 찾아 없으면 만든다(find-or-create) ✅(확정)
+
+같은 이름으로 다시 등록하면 **새 어종이 생기는 대신 기존 어종에 기록이 한 건 붙는다.** 그래서 `customCatchRecordId`는 매번 새로 생기지만 `customFishId`는 그대로다.
+
+- 판정 기준은 **트림된 이름의 완전일치**이며 `UNIQUE(user_id, name)`가 최종 방어선이다. 같은 이름을 동시에 두 번 등록하면 조회가 둘 다 빈 결과를 받을 수 있는데, 그때는 제약 위반으로 **중복 어종이 생기는 대신 요청 하나가 실패**한다(재시도하면 된다).
+- 서식지를 이번에 적었으면 어종의 `habitat`이 그 값으로 **갱신된다(마지막에 적은 값이 이긴다).** 처음엔 비워 뒀다가 나중에 채우는 흐름이 자연스럽고 그게 최신 의도이기 때문이다. 이번에 안 적었으면(`null`) 기존 값을 지우지 않는다.
+
+> ⚠️ **로컬 DB 주의:** 이 기능은 개발 중 `custom_catch_record`가 `fish_name`·`habitat` 컬럼을 직접 들고 있던 시기가 있었다. 그때 테이블이 만들어진 로컬 DB라면 `ddl-auto=update`로는 구조가 바뀌지 않는다(NOT NULL FK를 뒤늦게 붙일 수 없음). **`custom_catch_record`를 drop 한 뒤 재기동**하면 `custom_fish`와 함께 새로 생성된다. 배포 환경에는 아직 없는 테이블이라 영향이 없다.
+
+#### 왜 `catch_record`를 확장하지 않고 별도 테이블인가 ✅(확정)
+
+`catch_record.fishes_id`는 NOT NULL FK라 도감 밖 어종을 담을 수 없다. FK를 nullable 로 풀어 "이름만 있는 행"을 허용하는 대안도 있었지만, 그러면 `fishes_id IS NULL`인 행이 다음 세 곳에 그대로 섞여 들어간다.
+
+| 영향받는 곳 | 쿼리 | 섞였을 때의 증상 |
+|---|---|---|
+| 도감 완성도 랭킹 | `COUNT(DISTINCT c.fish.id)` | NULL 어종이 세어지거나 제외되는지가 DB 방언에 달림 |
+| 크기 랭킹 | `MAX(c.size)` | **검증되지 않은 수기 어종이 1위를 차지** |
+| 도감 그리드 | `findDistinctCaughtFishIds` | NULL id 가 칸 판정에 유입 |
+
+테이블을 `custom_catch_record`로 나누면 **위 쿼리를 한 줄도 고치지 않고** 기타 어종이 자동으로 빠진다. 즉 이 기록은 **도감 칸을 채우지 않고 랭킹에도 반영되지 않는다** — 의도된 동작이다.
+
+#### 입력 규칙
+
+- **인증 필요:** `Authorization: Bearer {accessToken}`. 신원은 토큰에서 얻는다(`userId` 파라미터 없음).
+- `fishName`: **필수**, 앞뒤 공백 제거 후 최대 30자(`C004` 미입력 / `C005` 초과).
+- `habitat`(주요 서식지): **선택**, 최대 20자(`C007`). 앞뒤 공백 제거, 공백만 입력은 `null`.
+  - **값을 정해진 목록으로 강제하지 않는다 ✅(확정).** 도감 어종은 콘텐츠 시드가 `fishes.habitat`를 채우지만 **도감 밖 어종은 채워 줄 시드가 없어** 잡은 사람이 직접 적는다. `fishes.habitat` 자체도 enum 이 아닌 자유 문자열이라 형태를 맞춘 것이고, 애초에 도감 분류에 안 맞는 어종을 담으려고 만든 기록이라 네 값으로 가두면 적을 말이 없어진다.
+  - 다만 도감이 쓰는 값은 `바다`·`강`·`저수지`·`하천` 네 가지이므로, **클라이언트가 이 값들을 후보로 제시**하고 필요 시 직접 입력을 허용하는 UI를 권장한다(나중에 서식지별로 묶을 때 값이 갈리지 않는다).
+  - `location`과 다른 값이다 — `location`은 **이번에 어디서 잡았나**(기록 1건의 속성), `habitat`은 **이 물고기가 원래 어디 사나**(어종의 속성)다.
+- `size`: **필수**, `0 < size <= 300`(cm). 도감 인증(`/verify`)과 **같은 상수**(`CatchRecordPolicy.MAX_SIZE_CM`)를 본다 — 사용자에게는 같은 화면의 같은 입력란이라 한쪽 한도만 달라지면 설명할 수 없다.
+- `location`: **선택**, 최대 100자(`C003`). 앞뒤 공백 제거, 공백만 입력은 미입력(`null`)과 동일. `catch_record.catch_location`과 동일한 규칙이다.
+- **이미 도감에 있는 어종명은 거부한다(`C006`, 400) ✅(확정).** 어종명 **완전일치** 판정이며, 걸리면 도감 인증(`POST /api/collections/verify`)으로 유도한다.
+  - 저장에 성공시키는 편이 친절해 보이지만 실제로는 반대다 — 그렇게 등록된 "붕어"는 도감 칸도 안 채우고 크기 랭킹에도 안 잡히는데, 사용자는 분명 붕어를 등록했으므로 이유를 알 수 없는 상태가 된다.
+  - 부분일치로 넓히지 않는 이유: "참붕어"처럼 실제로 도감 밖인 어종까지 막혀 등록 자체가 불가능해진다.
+- 사진은 S3 **`custom-fish/`** 경로에 저장한다(도감 인증의 `fish/`와 분리). 검증되지 않은 이름이 붙은 사진이라, 나중에 신규 어종 후보를 추리거나 학습 데이터로 쓸 때 prefix 만으로 골라낼 수 있어야 하기 때문이다 → `docs/media.md`.
+- **업로드 후 DB 저장이 실패하면 S3 객체를 보상 삭제**한다(`/verify`와 동일한 패턴). 저장은 `saveAndFlush`.
+- **회원탈퇴 시 함께 삭제된다.** `user_id`가 FK가 아니라 DB 캐스케이드가 없으므로, `CollectionService.deleteMyRecords`가 `CustomCatchService`로 위임해 두 테이블을 함께 정리한다(탈퇴 흐름의 호출부는 여전히 진입점 하나만 안다).
+
+#### 응답에 `firstCatch`·`catchCount`가 없는 이유
+
+`/verify`의 두 값은 (user, fish) 행 집계에서 파생한 것인데, 여기서 어종은 **검증되지 않은 자유 텍스트**다. 같은 물고기를 "우럭"·"조피볼락"으로 다르게 적으면 다른 어종으로 세어지므로, 신뢰할 수 없는 숫자를 "N번째 인증"으로 연출하느니 내려주지 않는다.
+
+- 오류: 크기 이상 `C001·C002(400)`, 위치 길이 초과 `C003(400)`, 어종명 미입력 `C004(400)`, 어종명 30자 초과 `C005(400)`, 이미 도감에 있는 어종 `C006(400)`, 서식지 20자 초과 `C007(400)`, 사진 문제 `S001~S003(400)`, 업로드 실패 `S004(500)`, 용량 초과 `413`.
+
+> 📋 **수정·삭제는 아직 없다.** 등록(`POST`)·조회(`GET`, 아래)만 구현했다.
+
+### `GET /api/collections/custom/dex` — 내 도감 외 어종 전체 조회 ✅ (보호)
+
+내가 등록한 도감 외 어종을 **전체** 조회한다. **`GET /api/collections/dex`(내 도감 그리드)와 같은 자리의 API**이고, 칸 하나 = 어종 하나이며 칸을 누르면 상세(`GET /api/collections/custom?customFishId=`)를 호출하는 흐름도 같다.
+
+- **인증 필요:** `Authorization: Bearer {accessToken}`. **파라미터 없음**(신원은 토큰).
+- **어종명이 같으면 같은 어종이다.** 같은 이름으로 3번 등록했다면 칸은 하나이고 `catchCount:3`.
+- 등록한 기록이 없어도 404가 아니라 **200 + 빈 목록**이다.
+- **정렬:** 가장 최근에 잡은 어종부터(그 어종의 최신 기록이 앞선 순).
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "totalCount": 2,
+    "totalCatchCount": 4,
+    "fishes": [
+      { "id": 3, "name": "쏘가리",   "imageUrl": "https://.../custom-fish/uuid1.jpg", "habitat": "강",  "catchCount": 3, "maxSize": 41.0 },
+      { "id": 1, "name": "미꾸라지", "imageUrl": "https://.../custom-fish/uuid3.jpg", "habitat": null, "catchCount": 1, "maxSize": 12.5 }
+    ]
+  }
+}
+```
+
+#### 도감 그리드(`/dex`)와 다른 점 ✅(확정)
+
+| 항목 | 도감 `/dex` | 도감 외 `/custom/dex` | 이유 |
+|---|---|---|---|
+| `caught` | 있음(그림자 분기) | **없음** | 이 목록은 **등록해야 생기는 칸**이라 전부 `true` — 항상 같은 값이면 화면 분기에 못 쓴다 |
+| `rarity` | 있음 | **없음** | 희귀도는 도감 마스터 데이터의 속성이라 사용자가 만든 어종에는 정할 주체가 없다 |
+| `catchCount`·`maxSize` | **없음**(칸이 안 쓰는 값을 24칸에 싣지 않음) | **있음** | 칸에 "몇 번 잡았는지"를 바로 보여 주는 것이 이 목록의 요구사항이다 |
+| `imageUrl` | 고정 도감 이미지 | **가장 최근에 등록한 사진** | 사용자가 만든 어종에는 고정 이미지가 없다. 새 사진을 올리면 칸이 자연스럽게 갱신된다 |
+| 수 두 개 | `totalCount`(24) / `caughtCount` = 완성도 | `totalCount`(내 어종 수) / `totalCatchCount`(총 기록 수) | 도감 외 어종에는 **"전체 몇 종"이라는 분모가 없어** 완성도(%)를 계산하지 않는다 |
+
+#### ⚠️ 같은 어종 판정은 "문자열 완전일치"다
+
+도감 어종은 `fishes_id`가 동일성을 보장하지만, 도감 외 어종은 **사용자가 적은 이름이 곧 동일성 판정 기준**이다(`custom_fish`의 `UNIQUE(user_id, name)`).
+
+- 등록 시 앞뒤 공백을 제거해 저장하므로 `"쏘가리 "`와 `"쏘가리"`는 같은 어종으로 모인다.
+- 반면 `"우럭"`과 `"조피볼락"`은 같은 물고기라도 **다른 어종**이 된다. 서버가 동의어 사전을 갖는 방법도 있지만, 도감 밖 어종은 정답 목록 자체가 없어 유지 주체가 없다. 대신 **입력 UI에서 이미 등록한 이름을 자동완성으로 제시**해 표기가 갈리는 것을 줄이는 쪽을 권장한다.
+
+#### 구현 메모 — 집계를 DB가 아니라 서비스에서 하는 이유
+
+어종별로 `GROUP BY` 해 개수를 세면, 칸마다 대표 사진을 다시 조회해야 해서 **어종 수만큼 쿼리가 늘어난다(N+1)**. 최신순 전체를 `JOIN FETCH`로 어종과 함께 **한 번에 받아 `LinkedHashMap`으로 묶으면 쿼리 1회**로 끝나고, 삽입 순서가 곧 "그 어종이 최신순 목록에서 처음 나온 순서"라 정렬도 공짜로 얻는다. 한 사용자의 기록은 많아야 수십~수백 건이라 성립하는 트레이드오프다.
+
+### `GET /api/collections/custom` — 도감 외 어종 상세 조회 ✅ (보호)
+
+도감 외 어종 **한 종**에 대한 내 기록 상세. **`GET /api/collections`(내 어종 인증 조회)와 같은 스펙**이며, 어종 식별자만 `fishId` → `customFishId`로 바뀐다. 화면은 두 상세를 **같은 썸네일 4칸 + 오버레이 컴포넌트**로 그릴 수 있다.
+
+- **인증 필요:** `Authorization: Bearer {accessToken}`. 파라미터: `customFishId`(전체 조회 응답의 `fishes[].id` 또는 등록 응답의 `customFishId`).
+- `catchCount`·`maxSize`는 **자르지 않은 전체 기록 기준**이고 `recentCatches`만 최신순 4장으로 제한된다. 상한은 도감 조회와 **같은 상수**(`CatchRecordPolicy.RECENT_PHOTO_LIMIT`)를 본다.
+  - ⚠️ **`maxSize`를 `recentCatches`에서 계산하면 안 된다.** 최대 크기가 잘려 나간 기록에 있을 수 있다. 그래서 서버는 `COUNT` + `MAX` 집계 쿼리(`CatchStats` 프로젝션 — 도감 상세와 공용)로 따로 센다.
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "customFishId": 3,
+    "name": "쏘가리",
+    "habitat": "강",
+    "catchCount": 3,
+    "maxSize": 41.0,
+    "recentCatches": [
+      { "customCatchRecordId": 12, "imageUrl": "https://.../custom-fish/uuid1.jpg", "size": 41.0, "location": "한탄강 고석정", "registeredAt": "2026-09-05T14:32:10" },
+      { "customCatchRecordId": 9,  "imageUrl": "https://.../custom-fish/uuid2.jpg", "size": 34.0, "location": null, "registeredAt": "2026-08-30T07:15:44" }
+    ]
+  }
+}
+```
+
+#### 도감 상세(`GET /api/collections`)와 다른 점
+
+- **`name`(어종명)이 추가로 온다.** 도감은 클라이언트가 `fishId`로 어종을 이미 알지만, 사용자가 만든 어종은 이름이 서버에만 있어 상세를 단독으로 열면 표시할 이름이 없다.
+- 사진 항목의 키가 다르다: `catchRecordId`→`customCatchRecordId`, `verifiedAt`→`registeredAt`(가리키는 테이블이 다르고, 이 기록은 인증(verify)을 거치지 않았다).
+- **`catchCount:0`인 상태가 없다.** 도감 어종은 "존재하지만 안 잡음"이 정상이지만, 도감 외 어종은 **등록해야 생기므로** 존재하면 기록이 1건 이상이다. 따라서 `maxSize`도 `null`이 되지 않는다.
+- 오류: `customFishId` 누락·타입 오류 `400`, **`C008(404)`** — 그런 어종이 없거나 **다른 사용자의 어종**인 경우.
+  - **남의 어종은 403이 아니라 404다 ✅(확정).** 소유자 조건을 쿼리에 넣어(`findByIdAndUserId`) "없음"과 "남의 것"을 같은 결과로 수렴시킨다. 403으로 답하면 "그 id의 어종이 존재한다"는 사실이 새어 나가고, 조회 후 소유자를 비교하는 방식은 비교를 한 곳이라도 빠뜨리면 남의 기록이 그대로 노출된다.
+
 ### `GET /api/collections/dex` — 내 도감 그리드 ✅ (보호)
 
 도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 `id` 오름차순 전체 집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다. (어종 목록 조립은 `FishService.getFishList`를 내부 재사용한다.)
@@ -754,14 +914,17 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ## 데이터 모델 (ERD)
 
-> **v0.5 — 현재 구현된 스키마 기준.** 아래 이미지는 구현 완료된 **7개 테이블**을 반영합니다. 관광(tour) 등 미구현 도메인이 추가되면 함께 갱신합니다.
+> **v0.6 — 현재 구현된 스키마 기준.** 아래 이미지는 구현 완료된 **9개 테이블**을 반영합니다. 관광(tour)은 전용 테이블이 없습니다(TourAPI 실시간 프록시).
 > 모든 엔티티는 `BaseTimeEntity`를 상속해 `createdAt`/`modifiedAt`을 가집니다(ERD에는 편의상 미표기, `@SuperBuilder` 사용 → `docs/conventions.md`).
 >
+> **v0.5 → v0.6 변경:** `custom_fish`(도감 외 어종 — 사용자별 카탈로그) · `custom_catch_record`(그 등록 기록) 추가. 두 테이블은 `fishes`↔`catch_record` 쌍을 사용자 어종용으로 복제한 구조이며, **도감 쪽 테이블과 연결선이 하나도 없다**는 점이 핵심이다 — 랭킹·도감 완성도 집계가 `catch_record`만 보므로 도감 외 어종은 조건절이 아니라 **구조적으로** 집계에서 빠진다.
 > **v0.4 → v0.5 변경:** 구 `user_dex` 제거(`catch_record`로 대체 완료) · `favorite`(스팟 찜) 추가 · `catch_record`·`inland_spot_detail` 논리명 반영.
 
-![img.png](erd_v0.5.png)
+> ⚠️ **이미지의 컬럼명 오기(다음 갱신 시 수정):** `custom_fish`·`custom_catch_record`의 FK/사용자 컬럼이 그림에는 모두 `id`로 적혀 있습니다. 실제 컬럼명은 `custom_fish`가 `id`·**`user_id`**, `custom_catch_record`가 `id`·**`custom_fish_id`**·**`user_id`** 입니다(설명 칸의 "사용자ID"·"도감 외 어종 id"는 맞습니다). 또 `custom_fish`의 **`UNIQUE(user_id, name)`** 이 비고에 빠져 있습니다 — `major_fish`·`favorite`처럼 표기가 필요합니다. **아래 표가 정확한 출처**입니다.
 
-### 엔티티 요약 (이미지 기준 v0.5)
+![img.png](erd_v0.6.png)
+
+### 엔티티 요약 (이미지 기준 v0.6)
 
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
@@ -769,6 +932,8 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준), `catch_location`(잡은 위치 **수기 입력**, VARCHAR(100)·nullable). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(등록 스팟과의 연결)는 추후 추가(TBD) — `catch_location`을 대체하지 않고 병존 |
+| `custom_fish` | 도감 외 어종 — **사용자별** 어종 카탈로그(`fishes`의 사용자 버전) | `id`, `user_id`(plain Long, FK 미승격), `name`(VARCHAR(30), NOT NULL), `habitat`(주요 서식지 **수기 입력**, VARCHAR(20)·nullable), **UNIQUE(user_id, name)** — 같은 이름이 곧 같은 어종. 이름은 검증되지 않은 자유 텍스트라 **전역이 아니라 사용자별**이다(남의 오타가 내 목록에 뜨거나, 이름 수정이 남의 기록까지 바꾸는 것을 막는다) |
+| `custom_catch_record` | 도감 외 어종 등록 **1건=1행**(`catch_record`의 사용자 어종 버전) | `id`, `user_id`(plain Long, FK 미승격 — 탈퇴 정리를 조인 없이 하려고 어종에도 있지만 여기에 둔다), `custom_fish_id`(FK, NOT NULL), `certified_image_url`(s3 `custom-fish/`), `size`(cm, NOT NULL), `catch_location`(VARCHAR(100)·nullable). **랭킹·도감 완성도 집계에서 제외**(집계 쿼리가 `catch_record`만 봄) |
 | `spots` | 낚시 스팟 | `id`, `name`, `lat`, `lot`, `prohibit`, `category`(ENUM 해양/내륙) |
 | `favorite` | 스팟 찜(사용자↔스팟 N:M) | `id`, `user_id`(plain Long), `spot_id`(plain Long), **UNIQUE(user_id, spot_id)**, `created_at`(찜 시각) |
 | `inland_spot_detail` | 내륙(담수) 스팟의 하천 제원 — `spots`와 **1:1** | `spot_id`(PK=FK), `river_width_min/max`(하폭), `flow_width_min/max`(유수폭), `depth_min/max`(수심). 단위 m, 각 값 nullable |
