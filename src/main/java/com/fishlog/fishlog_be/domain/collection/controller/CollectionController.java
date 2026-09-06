@@ -2,9 +2,13 @@ package com.fishlog.fishlog_be.domain.collection.controller;
 
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.ClassifyResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchDetailResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.MyCustomDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
 import com.fishlog.fishlog_be.domain.collection.service.CollectionService;
+import com.fishlog.fishlog_be.domain.collection.service.CustomCatchService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -24,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class CollectionController implements CollectionControllerSpec {
 
   private final CollectionService collectionService;
+  private final CustomCatchService customCatchService;
 
   @Override
   @GetMapping
@@ -55,5 +60,35 @@ public class CollectionController implements CollectionControllerSpec {
       @RequestPart("image") MultipartFile image) {
     return BaseResponse.success(
         "어종 인증이 완료되었습니다.", collectionService.verify(userId, fishId, size, location, image));
+  }
+
+  // 전체 목록. /dex 와 짝을 이루는 경로이며 파라미터는 없다(신원은 토큰).
+  @Override
+  @GetMapping("/custom/dex")
+  public BaseResponse<MyCustomDexResponse> getMyCustomDex(@AuthenticationPrincipal Long userId) {
+    return BaseResponse.success(customCatchService.getMyCustomDex(userId));
+  }
+
+  // 상세. GET /api/collections?fishId= 와 같은 형태로, 어종 id 만 customFishId 로 바뀐다.
+  @Override
+  @GetMapping("/custom")
+  public BaseResponse<CustomCatchDetailResponse> getMyCustomCatch(
+      @AuthenticationPrincipal Long userId, @RequestParam Long customFishId) {
+    return BaseResponse.success(customCatchService.getMyCustomCatch(userId, customFishId));
+  }
+
+  // 도감(fishes)에 없는 물고기라 fishId 가 아니라 사용자가 적은 fishName 을 받는다.
+  @Override
+  @PostMapping(value = "/custom", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public BaseResponse<CustomCatchResponse> registerCustomCatch(
+      @AuthenticationPrincipal Long userId,
+      @RequestParam String fishName,
+      @RequestParam(required = false) String habitat,
+      @RequestParam Double size,
+      @RequestParam(required = false) String location,
+      @RequestPart("image") MultipartFile image) {
+    return BaseResponse.success(
+        "도감 외 어종이 등록되었습니다.",
+        customCatchService.register(userId, fishName, habitat, size, location, image));
   }
 }
