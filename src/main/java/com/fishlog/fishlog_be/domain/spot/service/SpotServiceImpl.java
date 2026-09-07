@@ -21,6 +21,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -69,6 +70,14 @@ public class SpotServiceImpl implements SpotService {
     return spotRepository.findTop3ByOrderByViewCountDesc().stream()
         .map(spot -> PopularSpotResponse.of(spot, majorFishNames(spot)))
         .toList();
+  }
+
+  /** 특정 분류에서 조회수 최다 스팟 1곳(주요 대상 어종 포함). 배너 추천 스팟용. */
+  @Override
+  public Optional<PopularSpotResponse> getTopSpotByCategory(SpotCategory category) {
+    return spotRepository
+        .findTopByCategoryOrderByViewCountDesc(category)
+        .map(spot -> PopularSpotResponse.of(spot, majorFishNames(spot)));
   }
 
   @Override

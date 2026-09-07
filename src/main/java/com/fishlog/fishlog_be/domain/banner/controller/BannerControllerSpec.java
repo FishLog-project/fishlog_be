@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.domain.banner.controller;
 
+import com.fishlog.fishlog_be.domain.banner.dto.RecommendedSpotsResponse;
 import com.fishlog.fishlog_be.domain.fish.dto.SeasonalFishResponse;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,4 +57,47 @@ public interface BannerControllerSpec {
                             """)))
   })
   BaseResponse<List<SeasonalFishResponse>> getSeasonalFish();
+
+  @Operation(
+      summary = "추천 스팟(배너) — 해양·내륙 조회수 최다",
+      description =
+          """
+          ### 설명
+          - 배너에 노출할 추천 스팟입니다. 인기 스팟 Top3와 **동일 기준(누적 조회수)** 으로 뽑습니다.
+          - **해양·내륙 분류를 구분**해 각 분류에서 조회수 최다 스팟을 **1곳씩** 반환합니다.
+          - 각 스팟에는 좌표·분류·조회수·주요 대상 어종(`majorFishes`)이 포함됩니다.
+
+          ### 제약조건
+          - 인증 불필요(공개).
+          - 해당 분류의 스팟이 하나도 없으면 그 필드(`marine`/`inland`)는 `null`입니다.
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "조회 성공",
+        content =
+            @Content(
+                schema = @Schema(implementation = RecommendedSpotsResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "요청이 성공적으로 처리되었습니다.",
+                              "data": {
+                                "marine": {
+                                  "id": 1, "name": "격포항", "lat": 35.61, "lot": 126.46,
+                                  "category": "해양", "viewCount": 128, "majorFishes": ["감성돔", "참돔"]
+                                },
+                                "inland": {
+                                  "id": 57, "name": "소양호", "lat": 37.94, "lot": 127.81,
+                                  "category": "내륙", "viewCount": 84, "majorFishes": ["붕어", "잉어"]
+                                }
+                              }
+                            }
+                            """)))
+  })
+  BaseResponse<RecommendedSpotsResponse> getPopularSpots();
 }
