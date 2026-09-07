@@ -3,7 +3,9 @@ package com.fishlog.fishlog_be.domain.spot.service;
 import com.fishlog.fishlog_be.domain.spot.dto.PopularSpotResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
+import com.fishlog.fishlog_be.domain.spot.entity.SpotCategory;
 import java.util.List;
+import java.util.Optional;
 
 /** 낚시 스팟 조회 서비스. → docs/spec.md */
 public interface SpotService {
@@ -13,6 +15,13 @@ public interface SpotService {
 
   /** 조회수 상위 3개 인기 스팟. */
   List<PopularSpotResponse> getPopularSpots();
+
+  /**
+   * 특정 분류(해양/내륙)에서 조회수 최다 스팟 1곳. 배너 추천 스팟용. 해당 분류 스팟이 없으면 empty.
+   *
+   * @param category 스팟 분류
+   */
+  Optional<PopularSpotResponse> getTopSpotByCategory(SpotCategory category);
 
   /**
    * 스팟 상세 조회. DB 기본정보 + 대상 어종에 실시간 예보를 병합한다.

@@ -29,6 +29,7 @@
 | ✅ | DELETE | `/api/spots/{spotId}/favorite` | 스팟 찜 해제(idempotent) | 보호 |
 | ✅ | GET | `/api/fish/{id}` | 어종 상세 | 공개 |
 | ✅ | GET | `/api/banner/seasonal-fish` | 계절별 추천 어종(현재 월 계절 제철 어종 랜덤 3종 — `fishId`·`name`·`imageUrl`) | 공개 |
+| ✅ | GET | `/api/banner/popular-spots` | 추천 스팟(해양·내륙 조회수 최다 각 1곳 — 좌표·`category`·`viewCount`·`majorFishes`) | 공개 |
 | ✅ | GET | `/api/tours/nearby` | 현재 위치 주변 관광 장소(관광지/숙박/음식점 — `type`·`lat`·`lng`·`radius`·`page`, 거리순 30개) | 공개 |
 | ✅ | GET | `/api/collections` | 특정 어종의 내 인증 요약(잡은 횟수·최대 크기 + 인증 사진 목록). `fishId` 파라미터 | 보호 |
 | ✅ | POST | `/api/collections/classify` | 사진으로 어종 후보(Top-3) 분류. **저장 없음(순수 조회)** → `docs/external.md` §2 | 보호 |
@@ -343,6 +344,28 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
     { "fishId": 3, "name": "돌돔", "imageUrl": null },
     { "fishId": 17, "name": "쏘가리", "imageUrl": null }
   ]
+}
+```
+
+#### `GET /api/banner/popular-spots` — 추천 스팟(해양·내륙 조회수 최다) ✅ (공개)
+
+해양·내륙 분류를 구분해 각 분류에서 **누적 조회수(`viewCount`) 최다 스팟 1곳씩** 반환한다. 인기 스팟 Top3(`GET /api/spots/popular`)와 **동일 기준**이다 — 검색 후 상세조회가 곧 조회수에 반영되므로 별도 검색횟수 집계는 두지 않는다. 각 스팟은 인기 스팟과 같은 형태(`PopularSpotResponse`: 좌표·`category`·`viewCount`·`majorFishes`). 해당 분류 스팟이 없으면 그 필드는 `null`.
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "marine": {
+      "id": 1, "name": "격포항", "lat": 35.61, "lot": 126.46,
+      "category": "해양", "viewCount": 128, "majorFishes": ["감성돔", "참돔"]
+    },
+    "inland": {
+      "id": 57, "name": "소양호", "lat": 37.94, "lot": 127.81,
+      "category": "내륙", "viewCount": 84, "majorFishes": ["붕어", "잉어"]
+    }
+  }
 }
 ```
 

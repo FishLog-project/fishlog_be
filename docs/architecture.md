@@ -21,8 +21,8 @@ com.fishlog.fishlog_be
 │  │  ├─ exception/UserErrorCode.java          # U001~U004
 │  │  ├─ entity/User.java  repository/UserRepository.java
 │  ├─ spot                       # 스팟 목록/상세 + MajorFish
-│  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/{id}(상세=DB+대상어종+해양 예보/내륙 하천 제원)
-│  │  ├─ service/SpotService (+Impl)  dto/SpotResponse · SpotDetailResponse · ForecastResponse · InlandDetailResponse
+│  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/popular, /api/spots/{id}(상세=DB+대상어종+해양 예보/내륙 하천 제원)
+│  │  ├─ service/SpotService (+Impl)  # 목록·상세·인기 Top3·분류별 조회수 최다(getTopSpotByCategory, 배너용) dto/SpotResponse · SpotDetailResponse · PopularSpotResponse · ForecastResponse · InlandDetailResponse
 │  │  ├─ entity/Spot.java · SpotCategory.java(해양/내륙) · MajorFish.java · InlandSpotDetail.java(내륙 하천 제원, spots와 1:1)
 │  │  ├─ exception/SpotErrorCode.java  # S001 SPOT_NOT_FOUND
 │  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java  repository/InlandSpotDetailRepository.java
@@ -52,9 +52,10 @@ com.fishlog.fishlog_be
 │  │  ├─ service/FavoriteService.java · FavoriteServiceImpl.java  # 추가·해제·찜 spotId 집합·탈퇴 정리
 │  │  ├─ entity/Favorite.java  repository/FavoriteRepository.java  # UNIQUE(user_id, spot_id)
 │  │  └─ (예외 없음 — 스팟 미존재는 SpotErrorCode.SPOT_NOT_FOUND 재사용)
-│  ├─ banner                     # 홈 배너 콘텐츠(전용 테이블 없음 — fish 도메인 조합)
-│  │  ├─ controller/BannerController.java (+Spec)  # GET /api/banner/seasonal-fish (공개)
-│  │  └─ service/BannerService.java · BannerServiceImpl.java  # 현재 월(KST)→계절 판정 + 제철 어종 랜덤 3선(FishService.getFishInSeason 경유)
+│  ├─ banner                     # 홈 배너 콘텐츠(전용 테이블 없음 — fish·spot 도메인 조합)
+│  │  ├─ controller/BannerController.java (+Spec)  # GET /api/banner/seasonal-fish, /popular-spots (공개)
+│  │  ├─ service/BannerService.java · BannerServiceImpl.java  # 계절 제철 어종 랜덤 3선(FishService) + 해양·내륙 조회수 최다 스팟(SpotService) 경유
+│  │  └─ dto/RecommendedSpotsResponse  # marine·inland 각 PopularSpotResponse
 │  └─ tour                       # 주변 관광 장소(전용 테이블 없음 — TourAPI 실시간 프록시)
 │     ├─ controller/TourController.java (+Spec)  # GET /api/tours/nearby (공개)
 │     ├─ service/TourService.java · TourServiceImpl.java  # type→contentTypeId, radius/page 보정 후 global/tour 호출
