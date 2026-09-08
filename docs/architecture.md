@@ -64,9 +64,10 @@ com.fishlog.fishlog_be
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
-   ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), S3Config(S3Client), SwaggerConfig(JWT 스킴)
+   ├─ config                                  # AsyncConfig(@Async), CorsConfig, ImageResourceConfig(/images/fish/** 정적 서빙), PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), S3Config(S3Client), SwaggerConfig(JWT 스킴)
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
+   ├─ image                                   # 도감 이미지 URL 제공 — FishImageService(+Impl). data/fish/images/ 를 기동 시 스캔해 어종 id → 절대 URL 생성(어종/그림자/기본 이미지) → docs/media.md §0
    ├─ ai                                      # 어종 분류 모델 서버 연동 — FishClassifyClient(+Impl)·AiErrorCode(AI001~AI008)·dto/PredictResponse·PredictionItem → docs/external.md §2
    ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName(profile/·fish/·custom-fish/)·S3ErrorCode → docs/media.md
    ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
@@ -239,12 +240,13 @@ public class SpotController implements SpotControllerSpec {
 | `common` | 공통 상위 엔티티 등(`BaseTimeEntity`) | ✅ |
 | `response` | 공통 응답 래퍼(`BaseResponse`) | ✅ |
 | `exception` (+`model`) | 전역 예외 처리·공통 에러 코드(`GlobalExceptionHandler`, `GlobalErrorCode`, `model/BaseErrorCode`) | ✅ |
-| `config` | Spring `@Configuration` 모음 — `AsyncConfig`(@Async)·`CorsConfig`·`PasswordConfig`(BCrypt)·`RedisConfig`(캐시·인증코드 저장)·`RestClientConfig`(외부 HTTP 타임아웃)·`SwaggerConfig`(OpenAPI + Bearer JWT 스킴) | ✅ |
+| `config` | Spring `@Configuration` 모음 — `AsyncConfig`(@Async)·`CorsConfig`·`ImageResourceConfig`(도감 이미지 `/images/fish/**` 정적 서빙)·`PasswordConfig`(BCrypt)·`RedisConfig`(캐시·인증코드 저장)·`RestClientConfig`(외부 HTTP 타임아웃)·`SwaggerConfig`(OpenAPI + Bearer JWT 스킴) | ✅ |
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
 | `tour` | 관광 정보(TourAPI KorService2) 외부연동 — `TourApiClient`(+Impl)·`TourErrorCode`·`dto/TourApiItem`·`TourApiResult`. 위치기반 관광 장소를 **매 요청 실시간 호출**(캐시·DB 없음) → docs/external.md §2 | ✅ |
 | `ai` | 어종 분류 모델 서버 연동 — `FishClassifyClient`(+`Impl`)·`AiErrorCode`·`dto/PredictResponse`. multipart 로 원본 바이트 전송, 4xx 무재시도 / 5xx·타임아웃 1회 재시도 → docs/external.md §2 | ✅ |
+| `image` | 도감 이미지(어종·그림자·도감 외 어종 기본) URL 제공 — `FishImageService`(+`Impl`). **DB 컬럼이 아니라 어종 id로 파일명을 규칙 생성**하고, 파일은 `data/fish/images/`에 두어 `ImageResourceConfig`가 `/images/fish/**`로 정적 서빙한다 (→ docs/media.md §0) | ✅ |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필(`profile/`)·어종 인증(`fish/`)·도감 외 어종(`custom-fish/`) 사진 적용 (docs/media.md) | ✅ |
 | `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`·`InlandDetailSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |

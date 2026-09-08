@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.global.security;
 
+import com.fishlog.fishlog_be.global.image.FishImageService;
 import com.fishlog.fishlog_be.global.jwt.JwtAuthenticationFilter;
 import com.fishlog.fishlog_be.global.jwt.JwtProvider;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * Spring Security 필터 체인. 무상태(JWT) REST API. → docs/security.md §3
  *
- * <p>공개: 인증 API·조회성 GET(스팟/어종/랭킹/배너/관광)·Swagger. 그 외는 인증 필요. CORS는 {@code CorsConfig}의 소스를 사용.
+ * <p>공개: 인증 API·조회성 GET(스팟/어종/랭킹/배너/관광)·도감 이미지 정적 파일·Swagger. 그 외는 인증 필요. CORS는 {@code CorsConfig}의
+ * 소스를 사용.
  *
  * <p>랭킹은 목록 자체는 공개지만, 토큰이 있으면 필터가 principal(userId)을 세팅하므로 컨트롤러에서 로그인 시에만 내 순위(me)를 채운다.
  */
@@ -50,7 +52,9 @@ public class SecurityConfig {
                         "/api/fish/**",
                         "/api/rankings/**",
                         "/api/banner/**",
-                        "/api/tours/**")
+                        "/api/tours/**",
+                        // 도감 이미지 정적 파일(어종/그림자/기본). 로그인 전 화면·<img> 태그에서 받아야 하므로 공개.
+                        FishImageService.URL_PREFIX + "**")
                     .permitAll()
                     .anyRequest()
                     .authenticated())

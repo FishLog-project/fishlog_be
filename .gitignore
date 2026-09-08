@@ -43,3 +43,5 @@ src/main/resources/.yml
 ### local-only docker compose (원격 미배포) ###
 docker/docker-compose-loacl.yml
 docker/docker-compose.local.yml
+### fishlog: 도감 이미지 원본 (서빙용 축소본만 커밋한다 — data/fish/resize_images.py)
+data/fish/images_original/

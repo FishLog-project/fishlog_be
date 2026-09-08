@@ -3,6 +3,10 @@
 # 1. Java 21 환경 기반 (베이스 이미지, 프로젝트 자바 버전에 맞추기)
 FROM eclipse-temurin:21-jre
 
+# 로케일을 UTF-8로 고정. 기본 C/POSIX(ASCII) 로케일에서는 JVM이 비ASCII 파일명·로그를 "???"로 처리한다(sun.jnu.encoding).
+# 도감 이미지 파일명은 ASCII 슬러그라 지금은 영향이 없지만, 한글 시드/로그를 다루는 앱이므로 UTF-8로 못박아 둔다.
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+
 # 컨테이너 안 작업 디렉토리
 WORKDIR /app
 
@@ -11,6 +15,7 @@ COPY build/libs/fishlog_be-0.0.1-SNAPSHOT.jar app.jar
 
 # 시드 데이터(data/) 복사 — 앱이 /app 기준 상대경로(file:data/spot/spots_seed.json 등)로 읽으므로 필수.
 # 없으면 SeedDataInitializer 기동 시 "시드 파일을 찾을 수 없습니다"로 컨텍스트 생성 실패.
+# 도감 이미지(data/fish/images/)도 여기 포함돼 /images/fish/** 로 서빙된다. → docs/media.md §0
 COPY data ./data
 
 # 이 컨테이너가 8080을 쓴다는 문서화

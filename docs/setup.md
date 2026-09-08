@@ -42,6 +42,8 @@ git submodule update --remote             # 설정 변경 최신화
 | `auth.email.*` | 코드 TTL·쿨다운·한도·인증완료 TTL | 선택 | 코드 기본값 존재(`docs/security.md` §7) |
 | `auth.allowed-email-domains` | 가입 허용 이메일 도메인(쉼표) | 선택 | 비우면 제한 없음 |
 | `fishlog.seed.enabled` | 로컬 시드 적재 on/off | 선택 | 로컬 `true` |
+| `fishlog.image.dir` | 도감 이미지 파일 디렉터리 | 선택 | 기본 `data/fish/images`(앱 실행 위치 기준 상대 경로). Dockerfile 의 `COPY data ./data`로 이미 배포됨 → `docs/media.md` §0 |
+| `fishlog.image.base-url` | 도감 이미지 절대 URL 접두사 | 선택 | 비우면 **요청 컨텍스트에서 자동 생성**(prod compose 가 `SERVER_FORWARD_HEADERS_STRATEGY=framework`를 켬). 도메인을 고정하려면 `https://api.example.com` 처럼 설정 |
 
 - **도입된 의존성(`build.gradle`):** `spring-boot-starter-security`, `io.jsonwebtoken:jjwt-*:0.12.6`, `spring-boot-starter-mail`, `spring-boot-starter-data-redis`, `springdoc-openapi-starter-webmvc-ui:3.0.3`.
 - ⚠️ prod properties(`application-prod.properties`)는 아직 `spring.application.name`만 있어 **DB·Redis·JWT·SMTP를 채워야 배포 가능**.

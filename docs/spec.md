@@ -40,6 +40,7 @@
 | ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
 | ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 | ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
+| ✅ | GET | `/images/fish/**` | **도감 이미지 정적 파일**(`{영문어종명}_image` · `{영문어종명}_shadow` · `basic_image`). API가 아니라 서버가 직접 서빙하는 파일이며, 위 응답들의 `imageUrl`이 이 경로를 가리킨다 → `docs/media.md` §0 | 공개 |
 
 > 위 경로는 초안입니다. 도메인 확정 시 Request/Response 스키마와 함께 상세화.
 
@@ -313,13 +314,14 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
     "name": "감성돔",
     "description": "은빛 몸에 검은 지느러미를 두른 갯바위 낚시의 대표 어종. 경계심이 강해 낚기 까다롭다.",
     "habitat": "바다",
-    "imageUrl": null,
+    "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png",
     "rarity": "USUALLY"
   }
 }
 ```
 
-> `description`·`habitat`은 콘텐츠 시드(`data/fish/fish_content_seed.json`)로 채워진다 → 아래 "어종 도감 콘텐츠 시드". `imageUrl`·`rarity`는 아직 큐레이션 전이라 `null`로 응답된다.
+> `description`·`habitat`은 콘텐츠 시드(`data/fish/fish_content_seed.json`)로 채워진다 → 아래 "어종 도감 콘텐츠 시드". `rarity`는 아직 큐레이션 전이라 `null`로 응답될 수 있다.
+> `imageUrl`은 **DB 컬럼이 아니라** 어종명으로 만든 서버 정적 파일 URL이다(`{서버}/images/fish/{영문어종명}_image.png`). 파일이 없으면 `null`. → `docs/media.md` §0
 
 ### 배너 (`/api/banner`) ✅
 
@@ -332,7 +334,7 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
 - **계절 기준(월):** 봄 3~5월 · 여름 6~8월 · 가을 9~11월 · 겨울 12~2월. 판정은 `Season.of(month)`(fish 도메인), 현재 계절·랜덤 선택은 `BannerService`.
 - **후보 조회:** `FishService.getFishInSeason(Season)`이 해당 계절 제철 어종 전체(`fishes`의 계절 boolean 플래그 매칭)를 반환하고, 배너 서비스가 셔플 후 최대 3종으로 자른다.
 - **개수 부족 허용:** 제철 어종이 3종 미만이면 있는 만큼만 반환한다(빈 배열 가능, 예외 아님). 현재 시드는 계절당 11~21종이라 항상 3종이 채워진다.
-- `imageUrl`은 도감 이미지 큐레이션 전이라 현재 `null`로 응답된다.
+- `imageUrl`은 서버 정적 파일(`{서버}/images/fish/{영문어종명}_image.png`)이며, 파일이 없으면 `null`이다. → `docs/media.md` §0
 
 ```json
 {
@@ -340,9 +342,9 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   "code": 200,
   "message": "요청이 성공적으로 처리되었습니다.",
   "data": [
-    { "fishId": 9, "name": "갈치", "imageUrl": null },
-    { "fishId": 3, "name": "돌돔", "imageUrl": null },
-    { "fishId": 17, "name": "쏘가리", "imageUrl": null }
+    { "fishId": 10, "name": "갈치", "imageUrl": "http://localhost:8080/images/fish/hairtail_image.png" },
+    { "fishId": 4, "name": "돌돔", "imageUrl": "http://localhost:8080/images/fish/rock_bream_image.png" },
+    { "fishId": 18, "name": "쏘가리", "imageUrl": "http://localhost:8080/images/fish/mandarin_fish_image.png" }
   ]
 }
 ```
@@ -710,9 +712,9 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
   "uncertain": false,
   "guide": "후보 중에서 잡은 어종을 선택해주세요. 목록에 없으면 직접 선택할 수 있어요.",
   "candidates": [
-    { "rank": 1, "fishId": 15, "name": "붕어",   "imageUrl": null, "confidence": 0.83 },
-    { "rank": 2, "fishId": 16, "name": "잉어",   "imageUrl": null, "confidence": 0.05 },
-    { "rank": 3, "fishId": 20, "name": "가물치", "imageUrl": null, "confidence": 0.01 }
+    { "rank": 1, "fishId": 16, "name": "붕어",   "imageUrl": "http://localhost:8080/images/fish/crucian_carp_image.png", "confidence": 0.83 },
+    { "rank": 2, "fishId": 17, "name": "잉어",   "imageUrl": "http://localhost:8080/images/fish/carp_image.png", "confidence": 0.05 },
+    { "rank": 3, "fishId": 21, "name": "가물치", "imageUrl": "http://localhost:8080/images/fish/snakehead_image.png", "confidence": 0.01 }
   ]
 }
 ```
@@ -836,6 +838,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - **어종명이 같으면 같은 어종이다.** 같은 이름으로 3번 등록했다면 칸은 하나이고 `catchCount:3`.
 - 등록한 기록이 없어도 404가 아니라 **200 + 빈 목록**이다.
 - **정렬:** 가장 최근에 잡은 어종부터(그 어종의 최신 기록이 앞선 순).
+- **`imageUrl`은 모든 칸이 같은 기본 이미지다** — 서버 정적 파일 `{서버}/images/fish/basic_image.png`. 사용자가 찍은 사진은 상세 조회에서 본다. → `docs/media.md` §0
 
 ```json
 {
@@ -846,8 +849,8 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
     "totalCount": 2,
     "totalCatchCount": 4,
     "fishes": [
-      { "id": 3, "name": "쏘가리",   "imageUrl": "https://.../custom-fish/uuid1.jpg", "habitat": "강",  "catchCount": 3, "maxSize": 41.0 },
-      { "id": 1, "name": "미꾸라지", "imageUrl": "https://.../custom-fish/uuid3.jpg", "habitat": null, "catchCount": 1, "maxSize": 12.5 }
+      { "id": 3, "name": "쏘가리",   "imageUrl": "http://localhost:8080/images/fish/basic_image.png", "habitat": "강",  "catchCount": 3, "maxSize": 41.0 },
+      { "id": 1, "name": "미꾸라지", "imageUrl": "http://localhost:8080/images/fish/basic_image.png", "habitat": null, "catchCount": 1, "maxSize": 12.5 }
     ]
   }
 }
@@ -860,7 +863,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | `caught` | 있음(그림자 분기) | **없음** | 이 목록은 **등록해야 생기는 칸**이라 전부 `true` — 항상 같은 값이면 화면 분기에 못 쓴다 |
 | `rarity` | 있음 | **없음** | 희귀도는 도감 마스터 데이터의 속성이라 사용자가 만든 어종에는 정할 주체가 없다 |
 | `catchCount`·`maxSize` | **없음**(칸이 안 쓰는 값을 24칸에 싣지 않음) | **있음** | 칸에 "몇 번 잡았는지"를 바로 보여 주는 것이 이 목록의 요구사항이다 |
-| `imageUrl` | 고정 도감 이미지 | **가장 최근에 등록한 사진** | 사용자가 만든 어종에는 고정 이미지가 없다. 새 사진을 올리면 칸이 자연스럽게 갱신된다 |
+| `imageUrl` | 어종 이미지 / 그림자 이미지 | **공통 기본 이미지(`basic_image`)** | 사용자가 만든 어종에는 공식 도감 이미지가 없다. 도감 그리드와 나란히 놓이는 화면이라 칸마다 제각각인 실사 사진보다 통일된 아이콘이 낫고, 본인 사진은 상세에서 본다 |
 | 수 두 개 | `totalCount`(24) / `caughtCount` = 완성도 | `totalCount`(내 어종 수) / `totalCatchCount`(총 기록 수) | 도감 외 어종에는 **"전체 몇 종"이라는 분모가 없어** 완성도(%)를 계산하지 않는다 |
 
 #### ⚠️ 같은 어종 판정은 "문자열 완전일치"다
@@ -914,7 +917,8 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 `id` 오름차순 전체 집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다. (어종 목록 조립은 `FishService.getFishList`를 내부 재사용한다.)
 
 - **인증 필요:** `Authorization: Bearer {accessToken}`. 파라미터 없음(신원은 토큰).
-- `caught=true`면 도감 이미지(`imageUrl`), `false`면 같은 이미지를 그림자(실루엣)로 렌더한다. **그림자는 클라이언트 이펙트**라 서버는 플래그만 내려준다.
+- **`imageUrl`은 서버가 골라서 내려준다 ✅(확정)** — `caught=true`면 어종 이미지(`{영문어종명}_image`), `false`면 **그림자 이미지 파일**(`{영문어종명}_shadow`)이다. 그림자를 클라이언트 이펙트로 만들지 않고 별도 파일로 준비했으므로, 어느 쪽인지 아는 서버가 URL 하나로 확정한다(프론트는 분기 없이 그대로 렌더). `caught` 플래그는 완성도 표시·필터 용도로 계속 내려준다. 미획득 어종의 **실제 이미지 URL은 응답에 실리지 않아** 스포일러도 막힌다. → `docs/media.md` §0
+- 이미지는 서버가 직접 서빙하는 **정적 파일**(`{서버}/images/fish/…`)이며 토큰 없이 접근 가능하다(`<img src>`에 그대로 사용). 아직 준비되지 않은 이미지는 `null`.
 - **어종별 "잡은 횟수"는 이 응답에 담지 않는다 ✅(확정).** 그리드는 획득/미획득만 그리고, 칸을 눌렀을 때 `GET /api/collections?fishId=`가 `catchCount`·`imageUrls`를 준다. 그리드가 쓰지 않는 값을 전체 어종 수만큼 실어 보내지 않기 위한 분리이며, 나중에 칸에 횟수 배지를 띄우기로 하면 그때 `GROUP BY fishes_id` 집계를 덧입히면 된다(쿼리 수는 그대로 1회).
 - `totalCount`/`caughtCount`는 도감 완성도(랭킹의 분모/분자)와 같은 값이라, 이 응답만으로 진행도까지 그릴 수 있다 → `docs/ranking.md`.
 - **`habitat`(서식지)를 칸마다 함께 내려준다 ✅** — `바다`/`강`/`저수지`/`하천`. 도감을 서식지별 탭·그룹으로 묶기 위한 값으로, `fishes.habitat`(콘텐츠 시드가 적재)을 그대로 노출한다. 시드에 값이 없는 어종은 `null`일 수 있어 클라이언트가 "기타"로 처리해야 한다. ⚠️ 이 값은 **어종 기준**이며 스팟의 `category`(해양/내륙)와 1:1이 아니다(위 "어종 도감 콘텐츠 시드" 참고).
@@ -928,8 +932,8 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
     "totalCount": 24,
     "caughtCount": 12,
     "fishes": [
-      { "id": 1, "name": "감성돔", "imageUrl": null, "rarity": "USUALLY", "habitat": "바다", "caught": true },
-      { "id": 2, "name": "붕어", "imageUrl": null, "rarity": "LOW", "habitat": "저수지", "caught": false }
+      { "id": 1,  "name": "감성돔", "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png", "rarity": "USUALLY", "habitat": "바다", "caught": true },
+      { "id": 16, "name": "붕어",   "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png", "rarity": "LOW", "habitat": "저수지", "caught": false }
     ]
   }
 }
@@ -952,7 +956,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 | 테이블 | 역할 | 주요 컬럼 |
 |---|---|---|
 | `users` | 사용자 | `id`, `username`(email, UNIQUE), `password_hash`, `nickname`(UNIQUE), `profile_image_url`(nullable) |
-| `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(s3, TBD), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
+| `fishes` | 어종(도감 기준) — **모든 행이 곧 전체 도감**(확정 24종) | `id`, `name`, `description`·`habitat`(콘텐츠 시드로 적재), `image_url`(⚠️ **미사용 — 응답의 `imageUrl`은 이 컬럼이 아니라 어종명으로 만든 서버 정적 파일 URL이다** → `docs/media.md` §0), `rarity`(ENUM LOW/USUALLY/HIGH, TBD) |
 | `major_fish` | 스팟-어종 매핑(주요 어종, 구 `fish_sopt`) | `id`, `fishes_id`·`spots_id`(FK, 조합 UNIQUE), `season`(TBD) |
 | `catch_record` | 사용자 도감(어종 인증 **1건=1행**, 구 `user_dex`) | `id`, `user_id`(plain Long — `users.id` 참조하나 FK 미승격 → `docs/auth-followup.md` §1), `fishes_id`(FK), `certified_image_url`(s3), `size`(cm, NOT NULL·랭킹 기준), `catch_location`(잡은 위치 **수기 입력**, VARCHAR(100)·nullable). 잡은 횟수·획득 여부는 (user,fish) 행 **집계로 파생** → `catch_count`·`completion_rate` 컬럼 없음. `spot_id`(등록 스팟과의 연결)는 추후 추가(TBD) — `catch_location`을 대체하지 않고 병존 |
 | `custom_fish` | 도감 외 어종 — **사용자별** 어종 카탈로그(`fishes`의 사용자 버전) | `id`, `user_id`(plain Long, FK 미승격), `name`(VARCHAR(30), NOT NULL), `habitat`(주요 서식지 **수기 입력**, VARCHAR(20)·nullable), **UNIQUE(user_id, name)** — 같은 이름이 곧 같은 어종. 이름은 검증되지 않은 자유 텍스트라 **전역이 아니라 사용자별**이다(남의 오타가 내 목록에 뜨거나, 이름 수정이 남의 기록까지 바꾸는 것을 막는다) |
