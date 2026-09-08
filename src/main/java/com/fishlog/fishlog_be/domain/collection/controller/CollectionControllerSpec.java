@@ -189,7 +189,10 @@ public interface CollectionControllerSpec {
           """
           ### 설명
           - 전체 수집 대상 어종을 도감 순서(어종 ID 오름차순)대로 반환하며, 각 칸에 **로그인 사용자가** 잡았는지(`caught`)를 표시합니다.
-          - `caught=true`면 도감 이미지를, `false`면 같은 이미지를 그림자(실루엣)로 렌더하도록 프론트가 분기합니다(그림자는 클라이언트 이펙트, 서버는 플래그만 내려줌).
+          - **`imageUrl`은 서버가 골라서 내려줍니다** — `caught=true`면 어종 이미지, `false`면 **그림자(실루엣) 이미지**입니다.
+            프론트는 분기 없이 `imageUrl`을 그대로 그리면 됩니다(`caught`는 완성도 표시·필터 등 다른 용도로 유지).
+          - 이미지는 서버가 직접 서빙하는 정적 파일입니다: `{서버}/images/fish/{영문어종명}_image.png` · `{영문어종명}_shadow.png`.
+            토큰 없이 접근 가능하므로 `<img src>`에 그대로 넣을 수 있습니다. 아직 준비되지 않은 이미지는 `null`입니다.
           - **잡은 횟수·인증 사진은 이 응답에 없습니다.** 그리드는 획득/미획득만 그리고, 칸을 눌렀을 때
             `GET /api/collections?fishId={id}`로 해당 어종의 `catchCount`·`imageUrls`를 조회하세요.
           - `totalCount`(전체 수집 대상 수)와 `caughtCount`(내가 잡은 수)로 도감 완성도를 함께 계산할 수 있어, 별도 조회 없이 진행도 바를 그릴 수 있습니다. → docs/ranking.md
@@ -235,15 +238,15 @@ public interface CollectionControllerSpec {
                                   {
                                     "id": 1,
                                     "name": "감성돔",
-                                    "imageUrl": "https://.../fish/1.png",
+                                    "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png",
                                     "rarity": "USUALLY",
                                     "habitat": "바다",
                                     "caught": true
                                   },
                                   {
-                                    "id": 2,
+                                    "id": 16,
                                     "name": "붕어",
-                                    "imageUrl": "https://.../fish/2.png",
+                                    "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png",
                                     "rarity": "LOW",
                                     "habitat": "저수지",
                                     "caught": false
@@ -333,9 +336,9 @@ public interface CollectionControllerSpec {
                                 "uncertain": false,
                                 "guide": "후보 중에서 잡은 어종을 선택해주세요. 목록에 없으면 직접 선택할 수 있어요.",
                                 "candidates": [
-                                  { "rank": 1, "fishId": 15, "name": "붕어", "imageUrl": null, "confidence": 0.83 },
-                                  { "rank": 2, "fishId": 16, "name": "잉어", "imageUrl": null, "confidence": 0.05 },
-                                  { "rank": 3, "fishId": 20, "name": "가물치", "imageUrl": null, "confidence": 0.01 }
+                                  { "rank": 1, "fishId": 16, "name": "붕어", "imageUrl": "http://localhost:8080/images/fish/crucian_carp_image.png", "confidence": 0.83 },
+                                  { "rank": 2, "fishId": 17, "name": "잉어", "imageUrl": "http://localhost:8080/images/fish/carp_image.png", "confidence": 0.05 },
+                                  { "rank": 3, "fishId": 21, "name": "가물치", "imageUrl": "http://localhost:8080/images/fish/snakehead_image.png", "confidence": 0.01 }
                                 ]
                               }
                             }
@@ -493,7 +496,9 @@ public interface CollectionControllerSpec {
           - `caught` 없음 — 도감은 24칸 중 안 잡은 칸을 그림자로 그리지만, 이 목록은 **등록해야 생기는 칸**이라 전부 잡은 것입니다.
           - `rarity` 없음 — 희귀도는 도감 마스터 데이터의 속성이라 사용자가 만든 어종에는 없습니다.
           - `catchCount`·`maxSize` **있음** — 도감 그리드는 이 둘을 일부러 뺐지만, 이 목록은 칸에 바로 표시합니다.
-          - `imageUrl`은 고정 도감 이미지가 아니라 **가장 최근에 등록한 사진**입니다(새 사진을 올리면 칸이 갱신됩니다).
+          - `imageUrl`은 어종·기록과 무관하게 **항상 같은 기본 이미지**(`{서버}/images/fish/basic_image.png`)입니다.
+            사용자가 만든 어종에는 공식 도감 이미지가 없고, 도감 그리드와 나란히 놓이는 화면이라 통일된 아이콘을 씁니다.
+            **본인이 찍은 사진**은 칸을 눌러 상세(`GET /api/collections/custom?customFishId=`)에서 봅니다.
           - 수 두 개의 의미가 다릅니다 → `totalCount`는 **내가 만든 어종 수**(= `fishes` 길이), `totalCatchCount`는
             **등록한 기록의 총 수**입니다. 도감처럼 "전체 몇 종"이라는 분모가 없어 완성도(%)를 계산하지 않습니다.
 
@@ -536,7 +541,7 @@ public interface CollectionControllerSpec {
                                 {
                                   "id": 3,
                                   "name": "쏘가리",
-                                  "imageUrl": "https://.../custom-fish/uuid1.jpg",
+                                  "imageUrl": "http://localhost:8080/images/fish/basic_image.png",
                                   "habitat": "강",
                                   "catchCount": 3,
                                   "maxSize": 41.0
@@ -544,7 +549,7 @@ public interface CollectionControllerSpec {
                                 {
                                   "id": 1,
                                   "name": "미꾸라지",
-                                  "imageUrl": "https://.../custom-fish/uuid3.jpg",
+                                  "imageUrl": "http://localhost:8080/images/fish/basic_image.png",
                                   "habitat": null,
                                   "catchCount": 1,
                                   "maxSize": 12.5

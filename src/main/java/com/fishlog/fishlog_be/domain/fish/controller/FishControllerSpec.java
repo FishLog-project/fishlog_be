@@ -24,6 +24,7 @@ public interface FishControllerSpec {
           """
           ### 설명
           - 어종 ID로 도감 상세 정보(설명·서식지·이미지·희귀도)를 반환합니다.
+          - `imageUrl`은 서버가 서빙하는 정적 파일(`{서버}/images/fish/{영문어종명}_image.png`)이며, 파일이 아직 없으면 `null`입니다.
 
           ### 사용 방법
           - `GET /api/fish/{id}` (예: `/api/fish/1`).
@@ -57,7 +58,7 @@ public interface FishControllerSpec {
                                 "name": "감성돔",
                                 "description": "연안 방파제에서 흔히 잡히는 돔.",
                                 "habitat": "남해 연안",
-                                "imageUrl": "https://.../fish/1.png",
+                                "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png",
                                 "rarity": "USUALLY"
                               }
                             }

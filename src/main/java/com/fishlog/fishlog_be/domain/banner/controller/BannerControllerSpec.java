@@ -30,7 +30,7 @@ public interface BannerControllerSpec {
 
           ### 제약조건
           - 인증 불필요(공개). 로그인 없이 호출 가능합니다.
-          - `imageUrl`은 도감 이미지 큐레이션 전이라 현재 `null`일 수 있습니다.
+          - `imageUrl`은 서버가 서빙하는 도감 이미지 정적 파일(`{서버}/images/fish/{영문어종명}_image.png`)입니다. 파일이 아직 없으면 `null`입니다.
           - 해당 계절 제철 어종이 3종 미만이면 있는 만큼만 반환합니다(빈 배열 가능).
           """)
   @ApiResponses({
@@ -49,9 +49,9 @@ public interface BannerControllerSpec {
                               "code": 200,
                               "message": "요청이 성공적으로 처리되었습니다.",
                               "data": [
-                                { "fishId": 9, "name": "갈치", "imageUrl": null },
-                                { "fishId": 3, "name": "돌돔", "imageUrl": null },
-                                { "fishId": 17, "name": "쏘가리", "imageUrl": null }
+                                { "fishId": 10, "name": "갈치", "imageUrl": "http://localhost:8080/images/fish/hairtail_image.png" },
+                                { "fishId": 4, "name": "돌돔", "imageUrl": "http://localhost:8080/images/fish/rock_bream_image.png" },
+                                { "fishId": 18, "name": "쏘가리", "imageUrl": "http://localhost:8080/images/fish/mandarin_fish_image.png" }
                               ]
                             }
                             """)))
