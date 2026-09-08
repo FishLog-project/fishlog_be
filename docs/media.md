@@ -3,13 +3,15 @@
 > 이미지의 업로드·저장·검증 흐름. 저장소는 **AWS S3**. **공통 S3 인프라·프로필 이미지·어종 인증 사진 업로드 모두 ✅ 구현됨.**
 
 ## 구현 현황 ✅
-- **공통 S3 계층 `global/s3`**: `S3Service`(+`Impl`, AWS SDK v2 `S3Client`), `PathName`(경로 prefix enum: `PROFILE`·`FISH`), `S3ErrorCode`(S001~S004).
+- **공통 S3 계층 `global/s3`**: `S3Service`(+`Impl`, AWS SDK v2 `S3Client`), `PathName`(경로 prefix enum: `PROFILE`·`FISH`·`CUSTOM_FISH`), `S3ErrorCode`(S001~S004).
   - `upload(MultipartFile, PathName)` — 검증(이미지만·최대 5MB) 후 `{prefix}/{uuid}{ext}`로 업로드, 접근 URL 반환.
   - `delete(url)` — URL에서 key를 파싱해 객체 삭제.
 - **`S3Config`**(`global/config`): `spring.cloud.aws.*` 값으로 `S3Client` 빈 직접 구성(리전·정적 자격증명).
 - **적용:**
   - 프로필 이미지 `POST /api/users/me/profile-image`(→ `users.profile_image_url`, `PathName.PROFILE`).
   - **어종 인증 사진 `POST /api/collections/verify`**(→ `catch_record.certified_image_url`, `PathName.FISH`). 업로드 후 DB 저장이 실패하면 **S3 객체를 보상 삭제**해 고아 객체를 남기지 않는다. → `docs/spec.md`
+  - **도감 외 어종 사진 `POST /api/collections/custom`**(→ `custom_catch_record.certified_image_url`, `PathName.CUSTOM_FISH` = `custom-fish/`). 보상 삭제 패턴은 위와 동일하다.
+    - **경로를 `fish/`와 나눈 이유:** 이쪽 사진에는 모델·도감 어느 쪽으로도 검증되지 않은 이름이 붙어 있다. 나중에 신규 어종 후보를 추리거나 학습 데이터로 쓸 때, 검증된 사진과 한 prefix에 섞여 있으면 골라낼 방법이 없다. → `docs/spec.md`
   - → `docs/spec.md`, `docs/security.md`.
 
 ## 크기 한도 — 한 곳에서 관리 ✅

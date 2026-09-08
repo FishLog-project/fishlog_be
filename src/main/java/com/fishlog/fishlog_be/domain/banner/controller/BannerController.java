@@ -1,5 +1,6 @@
 package com.fishlog.fishlog_be.domain.banner.controller;
 
+import com.fishlog.fishlog_be.domain.banner.dto.RecommendedSpotsResponse;
 import com.fishlog.fishlog_be.domain.banner.service.BannerService;
 import com.fishlog.fishlog_be.domain.fish.dto.SeasonalFishResponse;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
@@ -23,5 +24,11 @@ public class BannerController implements BannerControllerSpec {
   @GetMapping("/seasonal-fish")
   public BaseResponse<List<SeasonalFishResponse>> getSeasonalFish() {
     return BaseResponse.success(bannerService.getSeasonalFishRecommendations(SEASONAL_FISH_COUNT));
+  }
+
+  @Override
+  @GetMapping("/popular-spots")
+  public BaseResponse<RecommendedSpotsResponse> getPopularSpots() {
+    return BaseResponse.success(bannerService.getRecommendedSpots());
   }
 }

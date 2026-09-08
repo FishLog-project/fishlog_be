@@ -1,8 +1,11 @@
 package com.fishlog.fishlog_be.domain.banner.service;
 
+import com.fishlog.fishlog_be.domain.banner.dto.RecommendedSpotsResponse;
 import com.fishlog.fishlog_be.domain.fish.dto.SeasonalFishResponse;
 import com.fishlog.fishlog_be.domain.fish.entity.Season;
 import com.fishlog.fishlog_be.domain.fish.service.FishService;
+import com.fishlog.fishlog_be.domain.spot.entity.SpotCategory;
+import com.fishlog.fishlog_be.domain.spot.service.SpotService;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -21,6 +24,7 @@ public class BannerServiceImpl implements BannerService {
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
   private final FishService fishService;
+  private final SpotService spotService;
 
   @Override
   public List<SeasonalFishResponse> getSeasonalFishRecommendations(int count) {
@@ -32,5 +36,13 @@ public class BannerServiceImpl implements BannerService {
     List<SeasonalFishResponse> candidates = new ArrayList<>(fishService.getFishInSeason(season));
     Collections.shuffle(candidates);
     return candidates.stream().limit(count).toList();
+  }
+
+  @Override
+  public RecommendedSpotsResponse getRecommendedSpots() {
+    // 분류별 조회수 최다 스팟 조회는 spot 도메인에 위임한다(순위 로직은 spot 소유).
+    return new RecommendedSpotsResponse(
+        spotService.getTopSpotByCategory(SpotCategory.해양).orElse(null),
+        spotService.getTopSpotByCategory(SpotCategory.내륙).orElse(null));
   }
 }

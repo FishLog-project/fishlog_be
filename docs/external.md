@@ -143,9 +143,66 @@ curl -s -F "file=@fish.jpg" http://${MODEL_EC2_HOST}/predict
 - [ ] `confidence`를 사용자에게 %로 노출할지 — 노출한다면 temperature scaling 보정이 먼저다
 - [ ] 사용자 확정 결과 로깅(모델 Top-1 ≠ 사용자 확정 사례가 재학습에 가장 값지다). 수집 동의·개인정보 처리방침 필요
 
-## 2. 관광 정보 — TourAPI (한국관광공사 등)
-- 용도: 낚시 스팟 **주변 관광/편의 시설** 정보 (`docs/product.md`의 Tour 도메인).
-- 확정 필요: 사용할 오퍼레이션(위치기반 관광정보 등), 카테고리 매핑, **응답 캐싱/DB 저장 여부**(매 요청 호출 vs 주기적 수집).
+## 2. 관광 정보 — TourAPI (한국관광공사 KorService2) ✅
+
+- **용도:** 사용자 **현재 위치 주변 관광 장소**(관광지·숙박·음식점) 조회 (`docs/product.md`의 Tour 도메인).
+- **제공처:** 한국관광공사_국문 관광정보 서비스 (공공데이터포털 데이터셋 **15101578**, TourAPI 4.0 = `KorService2`).
+  - 문서 페이지: https://www.data.go.kr/data/15101578/openapi.do
+  - **실제 호출 엔드포인트:** `https://apis.data.go.kr/B551011/KorService2/locationBasedList2`
+- **인증키:** data.go.kr **동일 계정키를 재사용**한다(§1 바다낚시지수와 같은 키). 프로퍼티 `external.tour.service-key`가 `external.fishing-index.service-key`(로컬)·`${API_DECODING_KEY}`(prod)를 가리킨다. ⚠️ **데이터셋 15101578 활용신청·승인이 별도로 필요**하다(미승인 시 인증 오류).
+
+### 오퍼레이션 · 카테고리 매핑
+
+`locationBasedList2`(위치기반 관광정보 목록)를 사용한다. 카테고리는 `contentTypeId`로 지정한다.
+
+| 요청 `type`(한글) | `contentTypeId` |
+|---|---|
+| 관광지 | 12 |
+| 숙박 | 32 |
+| 음식점 | 39 |
+
+**요청 파라미터**
+
+| 파라미터 | 값 | 설명 |
+|---|---|---|
+| `serviceKey` | 발급키 | 인증키(Decoding 키는 percent-encoding) |
+| `MobileOS` | `ETC` | 필수 |
+| `MobileApp` | `fishlog` | 필수(앱명, `external.tour.mobile-app`) |
+| `_type` | `json` | 응답 포맷(생략 시 XML) |
+| `arrange` | `E` | 정렬: **거리순** |
+| `mapX` / `mapY` | 경도 / 위도 | 검색 중심(우리 요청 `lng`/`lat`) |
+| `radius` | m (기본 5000, 최대 20000) | 검색 반경 |
+| `contentTypeId` | 12/32/39 | 카테고리 |
+| `numOfRows` | 30 | 페이지당 개수(고정) |
+| `pageNo` | 1.. | 페이지 |
+
+### 응답 매핑 (우리 서비스가 쓰는 필드)
+
+`response.body.items.item[]`에서 **7필드만** 추출한다.
+
+| 필드 | 의미 | 응답 |
+|---|---|---|
+| `title` | 장소명 | ✅ `title` |
+| `firstimage`/`firstimage2` | 대표/썸네일 이미지 | ✅ `firstImage`/`firstImage2`(빈 문자열 → null) |
+| `addr1`/`addr2` | 기본/상세 주소 | ✅ `addr1`/`addr2`(빈 문자열 → null) |
+| `mapx`/`mapy` | 경도/위도 | ✅ `mapX`/`mapY`(String → Double) |
+
+### 연동 방식 ✅ — 매 요청 실시간 프록시(캐시·DB 없음)
+
+- **Redis·DB를 쓰지 않고 매 요청 TourAPI를 실시간 호출**한다(제품 제약). 앵커가 고정 스팟이 아니라 **사용자 현재 GPS 좌표**라 좌표별 캐시 효율이 낮고, "항상 최신"이 요구사항이다.
+- 서버 런타임 클라이언트: **`global/tour`** — `TourApiClient`(+`Impl`, 호출·파싱·검증), `dto/TourApiItem`·`TourApiResult`, `TourErrorCode`(T001~T003). 기능 도메인은 **`domain/tour`**(컨트롤러·서비스·`TourCategory`·응답 DTO). RestClient 타임아웃 connect 2s/read 5s(`RestClientConfig#tourApiRestClient`).
+- **재시도:** 입력 문제(4xx)는 재시도하지 않고 `TOUR_API_ERROR(502)`. 연결 실패·타임아웃만 1회 재시도 후 실패 시 `TOUR_API_UNAVAILABLE(503)`.
+- **⚠️ 쿼터:** 실시간·무캐시라 사용자 요청 1건 = 외부 1콜(재시도 시 최대 2콜). data.go.kr 일일 쿼터를 소진하기 쉬우므로 **운영 계정 쿼터 상향**이 사실상 전제다.
+
+### data.go.kr 응답 방어 ⚠️
+
+- `items.item`은 **단건이면 객체 / 다건이면 배열**, 결과가 없으면 `items`가 **빈 문자열**이다 → 레코드 바인딩 대신 `JsonNode`로 관대하게 파싱한다(`FishingIndexClientImpl`과 동일).
+- `header.resultCode` 확인(성공 `"0000"`). 쿼터 초과·비정상 응답 시 XML/HTML 이 올 수 있어 JSON 파싱 실패도 `TOUR_API_ERROR`로 처리한다.
+
+### 미결정 항목 📋
+
+- [ ] 데이터셋 15101578 활용신청 승인 상태 확인, 운영 쿼터 규모 결정
+- [ ] "이미지 있는 장소 우선/필터" 정책(현재는 거리순 그대로, 이미지 유무 무관)
 
 ## 3. 날씨 / 물때 / 조위
 - 용도: 스팟 상세에서 낚시 조건(날씨·물때·조위) 제공.

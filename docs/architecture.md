@@ -1,6 +1,6 @@
 # architecture.md — 패키지 구조·레이어·공통 패턴
 
-> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증·회원가입·로그인)·스팟 목록/상세·어종 전체 도감·사용자 도감 조회·**AI 어종 분류 및 인증 사진 업로드**·랭킹·시드 적재와 Security/JWT·Redis·S3 인프라가 구현되어 있고, 관광(tour) 연동 등 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
+> 이 문서는 CLAUDE.md에서 항상 자동 로드됩니다. 인증(이메일 인증·회원가입·로그인)·스팟 목록/상세·어종 전체 도감·사용자 도감 조회·**AI 어종 분류 및 인증 사진 업로드**·랭킹·**주변 관광(TourAPI 위치기반)**·시드 적재와 Security/JWT·Redis·S3 인프라가 구현되어 있고, 일부 흐름은 아직 **📋 계획(TBD)** 입니다(각 항목 배지 참고).
 
 ## 현재 구조 ✅
 
@@ -21,8 +21,8 @@ com.fishlog.fishlog_be
 │  │  ├─ exception/UserErrorCode.java          # U001~U004
 │  │  ├─ entity/User.java  repository/UserRepository.java
 │  ├─ spot                       # 스팟 목록/상세 + MajorFish
-│  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/{id}(상세=DB+대상어종+해양 예보/내륙 하천 제원)
-│  │  ├─ service/SpotService (+Impl)  dto/SpotResponse · SpotDetailResponse · ForecastResponse · InlandDetailResponse
+│  │  ├─ controller/SpotController.java (+Spec)  # GET /api/spots, /api/spots/popular, /api/spots/{id}(상세=DB+대상어종+해양 예보/내륙 하천 제원)
+│  │  ├─ service/SpotService (+Impl)  # 목록·상세·인기 Top3·분류별 조회수 최다(getTopSpotByCategory, 배너용) dto/SpotResponse · SpotDetailResponse · PopularSpotResponse · ForecastResponse · InlandDetailResponse
 │  │  ├─ entity/Spot.java · SpotCategory.java(해양/내륙) · MajorFish.java · InlandSpotDetail.java(내륙 하천 제원, spots와 1:1)
 │  │  ├─ exception/SpotErrorCode.java  # S001 SPOT_NOT_FOUND
 │  │  └─ repository/SpotRepository.java  repository/MajorFishRepository.java  repository/InlandSpotDetailRepository.java
@@ -33,13 +33,16 @@ com.fishlog.fishlog_be
 │  │  ├─ entity/Fish.java · Rarity.java · Season.java(월→계절·제철 플래그 매칭)
 │  │  ├─ repository/FishRepository.java
 │  │  └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
-│  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행
-│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex · POST /classify, /verify (모두 보호)
+│  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행 + 도감 외 어종 수기 등록
+│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex, /custom/dex, /custom?customFishId= · POST /classify, /verify, /custom (모두 보호)
 │  │  ├─ service/CollectionService.java · CollectionServiceImpl.java
+│  │  ├─ service/CustomCatchService.java · CustomCatchServiceImpl.java  # 도감 외 어종 등록(find-or-create)·전체/상세 조회·탈퇴 정리(CollectionService가 위임)
+│  │  ├─ policy/CatchRecordPolicy.java                 # 크기·위치·어종명·서식지 검증/정규화 + 최근 사진 4장 상한 (verify·custom 공유)
 │  │  ├─ dto/CatchRecordResponse · CatchPhotoResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
-│  │  ├─ entity/CatchRecord.java
-│  │  ├─ exception/CollectionErrorCode.java            # C001~C003 (크기·잡은 위치 검증)
-│  │  └─ repository/CatchRecordRepository.java · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
+│  │  │      · CustomCatchResponse · MyCustomDexResponse · CustomDexEntryResponse · CustomCatchDetailResponse · CustomCatchPhotoResponse
+│  │  ├─ entity/CatchRecord.java · CustomFish.java · CustomCatchRecord.java  # 뒤 둘은 사용자별 어종 카탈로그 + 그 기록(랭킹·도감 집계에서 제외)
+│  │  ├─ exception/CollectionErrorCode.java            # C001~C003(크기·위치) · C004~C008(도감 외 어종명·서식지·조회)
+│  │  └─ repository/CatchRecordRepository.java · CustomFishRepository.java · CustomCatchRecordRepository.java · CatchStats.java(횟수+최대크기 projection, 두 기록 테이블 공용) · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
 │  ├─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
 │  │  ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
 │  │  ├─ service/RankingService.java · RankingServiceImpl.java
@@ -49,9 +52,15 @@ com.fishlog.fishlog_be
 │  │  ├─ service/FavoriteService.java · FavoriteServiceImpl.java  # 추가·해제·찜 spotId 집합·탈퇴 정리
 │  │  ├─ entity/Favorite.java  repository/FavoriteRepository.java  # UNIQUE(user_id, spot_id)
 │  │  └─ (예외 없음 — 스팟 미존재는 SpotErrorCode.SPOT_NOT_FOUND 재사용)
-│  └─ banner                     # 홈 배너 콘텐츠(전용 테이블 없음 — fish 도메인 조합)
-│     ├─ controller/BannerController.java (+Spec)  # GET /api/banner/seasonal-fish (공개)
-│     └─ service/BannerService.java · BannerServiceImpl.java  # 현재 월(KST)→계절 판정 + 제철 어종 랜덤 3선(FishService.getFishInSeason 경유)
+│  ├─ banner                     # 홈 배너 콘텐츠(전용 테이블 없음 — fish·spot 도메인 조합)
+│  │  ├─ controller/BannerController.java (+Spec)  # GET /api/banner/seasonal-fish, /popular-spots (공개)
+│  │  ├─ service/BannerService.java · BannerServiceImpl.java  # 계절 제철 어종 랜덤 3선(FishService) + 해양·내륙 조회수 최다 스팟(SpotService) 경유
+│  │  └─ dto/RecommendedSpotsResponse  # marine·inland 각 PopularSpotResponse
+│  └─ tour                       # 주변 관광 장소(전용 테이블 없음 — TourAPI 실시간 프록시)
+│     ├─ controller/TourController.java (+Spec)  # GET /api/tours/nearby (공개)
+│     ├─ service/TourService.java · TourServiceImpl.java  # type→contentTypeId, radius/page 보정 후 global/tour 호출
+│     ├─ entity/TourCategory.java  # 관광지12·숙박32·음식점39 (enum, @Entity 아님)
+│     └─ dto/NearbyTourResponse · TourSpotResponse
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
@@ -59,8 +68,9 @@ com.fishlog.fishlog_be
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
    ├─ ai                                      # 어종 분류 모델 서버 연동 — FishClassifyClient(+Impl)·AiErrorCode(AI001~AI008)·dto/PredictResponse·PredictionItem → docs/external.md §2
-   ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName·S3ErrorCode. 프로필·어종 인증 사진 → docs/media.md
+   ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName(profile/·fish/·custom-fish/)·S3ErrorCode → docs/media.md
    ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
+   ├─ tour                                     # 관광 정보(TourAPI KorService2) 외부연동 — TourApiClient(+Impl)·TourErrorCode(T001~T003)·dto/TourApiItem·TourApiResult (실시간, 캐시 없음) → docs/external.md §2
    ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, InlandDetailSeedLoader, SeedDataReader (+dto) — 스팟/어종/담수 상세 시드 적재
    └─ exception
       ├─ model/BaseErrorCode.java             # 에러 코드 인터페이스 (code/message/status)
@@ -118,11 +128,11 @@ domain
 │  └─ exception/UserErrorCode.java        📋
 ├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록·상세
 ├─ fish                     # 어종 정보                                      ✅
-├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드
+├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드·도감 외 어종 수기 등록
 ├─ ranking                  # 사용자 랭킹 (→ docs/ranking.md)                 ✅
 ├─ favorite                 # 스팟 찜 (사용자↔스팟 N:M)                       ✅
 ├─ banner                   # 홈 배너 (계절별 추천 어종 — fish 조합, 전용 테이블 없음) ✅
-└─ tour                     # 주변 관광 시설 (외부 연동 → docs/external.md)     📋
+└─ tour                     # 주변 관광 장소 (위치기반, TourAPI 실시간 → docs/external.md §2) ✅
 ```
 
 **레이어 규칙**
@@ -233,8 +243,9 @@ public class SpotController implements SpotControllerSpec {
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
+| `tour` | 관광 정보(TourAPI KorService2) 외부연동 — `TourApiClient`(+Impl)·`TourErrorCode`·`dto/TourApiItem`·`TourApiResult`. 위치기반 관광 장소를 **매 요청 실시간 호출**(캐시·DB 없음) → docs/external.md §2 | ✅ |
 | `ai` | 어종 분류 모델 서버 연동 — `FishClassifyClient`(+`Impl`)·`AiErrorCode`·`dto/PredictResponse`. multipart 로 원본 바이트 전송, 4xx 무재시도 / 5xx·타임아웃 1회 재시도 → docs/external.md §2 | ✅ |
-| `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필 이미지·어종 인증 사진 적용 (docs/media.md) | ✅ |
+| `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필(`profile/`)·어종 인증(`fish/`)·도감 외 어종(`custom-fish/`) 사진 적용 (docs/media.md) | ✅ |
 | `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`·`InlandDetailSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |
 | `{외부연동}` | 외부 시스템 클라이언트(지도·관광·SMS 등)를 관심사별 하위 패키지로 분리 (docs/external.md) | 📋 |

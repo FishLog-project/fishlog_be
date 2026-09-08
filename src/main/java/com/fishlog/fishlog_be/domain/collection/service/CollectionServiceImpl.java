@@ -7,8 +7,9 @@ import com.fishlog.fishlog_be.domain.collection.dto.FishCandidateResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
 import com.fishlog.fishlog_be.domain.collection.entity.CatchRecord;
-import com.fishlog.fishlog_be.domain.collection.exception.CollectionErrorCode;
+import com.fishlog.fishlog_be.domain.collection.policy.CatchRecordPolicy;
 import com.fishlog.fishlog_be.domain.collection.repository.CatchRecordRepository;
+import com.fishlog.fishlog_be.domain.collection.repository.CatchStats;
 import com.fishlog.fishlog_be.domain.fish.dto.FishSummaryResponse;
 import com.fishlog.fishlog_be.domain.fish.entity.Fish;
 import com.fishlog.fishlog_be.domain.fish.service.FishService;
@@ -37,33 +38,28 @@ import org.springframework.web.multipart.MultipartFile;
 @Transactional(readOnly = true)
 public class CollectionServiceImpl implements CollectionService {
 
-  /** 기록 가능한 어종 크기 상한(cm). 국내 대상어 최대치(대형 방어·갈치)를 크게 웃도는 값으로, 오타·장난 입력이 크기 랭킹을 장악하는 것을 막는다. */
-  private static final double MAX_SIZE_CM = 300.0;
-
-  /**
-   * 도감 상세에서 내려주는 최근 인증 사진 수. 화면이 썸네일 4칸을 깔고 누르면 오버레이로 키우는 구조라, 그 이상은 어차피 그리지 않는다. 인증을 수백 번 한 어종에서
-   * 응답이 무한정 커지는 것도 막는다.
-   */
-  private static final int RECENT_PHOTO_LIMIT = 4;
-
   private final CatchRecordRepository catchRecordRepository;
   // 도메인 간 접근은 상대 도메인의 service 인터페이스로만 한다(fish 의 repository·entity 직접 접근 금지).
   private final FishService fishService;
   private final FishClassifyClient fishClassifyClient;
   private final S3Service s3Service;
+  // 탈퇴 정리를 collection 도메인 안에서 마무리하기 위한 위임 대상(같은 도메인의 형제 서비스).
+  private final CustomCatchService customCatchService;
 
   @Override
   public CatchRecordResponse getMyCatch(Long userId, Long fishId) {
     // 서식지는 기록이 아니라 어종의 속성이라 어종을 먼저 조회한다 — 안 잡은 어종은 기록이 0건이라
     // 거기서 서식지를 끌어올 수 없다. 이 조회 때문에 없는 fishId 는 빈 결과가 아니라 F001(404)가 된다.
     Fish fish = fishService.getFishEntity(fishId);
-    // 전체 횟수는 따로 센다 — 아래에서 사진을 4장으로 자르므로 리스트 크기로는 총 횟수를 알 수 없다.
-    int catchCount = (int) catchRecordRepository.countByUserIdAndFish_Id(userId, fishId);
+    // 횟수·최대 크기는 따로 집계한다 — 아래에서 사진을 4장으로 자르므로 리스트로는 둘 다 알 수 없다.
+    // (최대 크기가 5번째로 오래된 기록에 있어도 잡혀야 한다.) 같은 스캔을 두 번 돌지 않도록 한 쿼리로 받는다.
+    CatchStats stats = catchRecordRepository.findStatsByUserIdAndFishId(userId, fishId);
     // 최신순 상위 N건만 조회. 안 잡았으면 빈 리스트 → 200 + catchCount 0 + recentCatches [].
     List<CatchRecord> recentRecords =
         catchRecordRepository.findByUserIdAndFish_IdOrderByCreatedAtDescIdDesc(
-            userId, fishId, PageRequest.of(0, RECENT_PHOTO_LIMIT));
-    return CatchRecordResponse.of(fish.getHabitat(), catchCount, recentRecords);
+            userId, fishId, PageRequest.of(0, CatchRecordPolicy.RECENT_PHOTO_LIMIT));
+    return CatchRecordResponse.of(
+        fish.getHabitat(), (int) stats.getCatchCount(), stats.getMaxSize(), recentRecords);
   }
 
   @Override
@@ -82,6 +78,9 @@ public class CollectionServiceImpl implements CollectionService {
   @Transactional
   public void deleteMyRecords(Long userId) {
     catchRecordRepository.deleteByUserId(userId);
+    // 도감 외 어종 기록도 같은 사용자의 도감 데이터다 — 여기서 함께 지워야 user 도메인이 테이블마다
+    // 호출을 늘리지 않아도 되고, 정리 누락으로 조회되지 않는 고아 사진이 남지 않는다.
+    customCatchService.deleteMyRecords(userId);
   }
 
   @Override
@@ -107,9 +106,9 @@ public class CollectionServiceImpl implements CollectionService {
   @Transactional
   public VerifyResponse verify(
       Long userId, Long fishId, Double size, String location, MultipartFile image) {
-    validateSize(size);
+    CatchRecordPolicy.validateSize(size);
     // 정규화를 업로드보다 먼저 끝낸다 — 길이 초과로 400을 낼 거라면 S3에 올리기 전이어야 한다.
-    String catchLocation = normalizeLocation(location);
+    String catchLocation = CatchRecordPolicy.normalizeLocation(location);
     // 어종 확인을 업로드보다 먼저 한다 — 없는 어종이면 S3에 고아 객체를 남기지 않고 404로 끝난다.
     Fish fish = fishService.getFishEntity(fishId);
 
@@ -168,33 +167,6 @@ public class CollectionServiceImpl implements CollectionService {
       return Optional.empty();
     }
     return fishService.getFishList(species).fishes().stream().findFirst();
-  }
-
-  /**
-   * 수기 입력 위치를 저장 형태로 정규화한다. 앞뒤 공백을 제거하고, 미입력·공백만 입력은 모두 {@code null}로 모은다 — "빈 문자열"과 "미입력"이 섞이면 조회
-   * 쪽에서 두 가지 빈 값을 각각 처리해야 하기 때문이다.
-   *
-   * @throws CustomException 트림 후 길이가 {@link CatchRecord#MAX_LOCATION_LENGTH}를 넘으면 {@code C003}. 컬럼
-   *     길이와 같은 상수를 보므로 DB가 잘라내기 전에 400으로 걸러진다
-   */
-  private String normalizeLocation(String location) {
-    if (location == null || location.isBlank()) {
-      return null;
-    }
-    String trimmed = location.trim();
-    if (trimmed.length() > CatchRecord.MAX_LOCATION_LENGTH) {
-      throw new CustomException(CollectionErrorCode.LOCATION_TOO_LONG);
-    }
-    return trimmed;
-  }
-
-  private void validateSize(Double size) {
-    if (size == null || size <= 0) {
-      throw new CustomException(CollectionErrorCode.INVALID_SIZE);
-    }
-    if (size > MAX_SIZE_CM) {
-      throw new CustomException(CollectionErrorCode.SIZE_OUT_OF_RANGE);
-    }
   }
 
   /** 보상 삭제는 best-effort 다 — 삭제까지 실패해도 원래 예외를 가리지 않는다. */

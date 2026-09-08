@@ -1,6 +1,7 @@
 package com.fishlog.fishlog_be.domain.spot.repository;
 
 import com.fishlog.fishlog_be.domain.spot.entity.Spot;
+import com.fishlog.fishlog_be.domain.spot.entity.SpotCategory;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,6 +18,9 @@ public interface SpotRepository extends JpaRepository<Spot, Long> {
 
   /** 조회수 상위 3개 스팟(내림차순). 인기 스팟 API용. */
   List<Spot> findTop3ByOrderByViewCountDesc();
+
+  /** 특정 분류(해양/내륙)에서 조회수 최다 스팟 1곳. 배너 추천 스팟용. 없으면 empty. */
+  Optional<Spot> findTopByCategoryOrderByViewCountDesc(SpotCategory category);
 
   /**
    * 조회수 원자적 증가. 엔티티 로드 없이 {@code UPDATE ... +1}로 동시성 안전하게 올린다(read-modify-write 경합 방지). 호출은
