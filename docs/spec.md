@@ -38,6 +38,8 @@
 | ✅ | GET | `/api/collections/custom/dex` | 내 도감 외 어종 **전체** 조회(그리드 — 어종별 `catchCount`·`maxSize`) | 보호 |
 | ✅ | GET | `/api/collections/custom` | 도감 외 어종 **상세** 조회(잡은 횟수·최대 크기 + 사진 목록). `customFishId` 파라미터 | 보호 |
 | ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
+| ✅ | GET | `/api/collections/records` | 내 인증 기록 **전체** 조회(도감 + 도감 외를 합쳐 최신순, **기록 단위**). 파라미터 없음 | 보호 |
+| ✅ | GET | `/api/collections/records/{recordId}` | 인증 기록 **단건** 조회. `type=DEX\|CUSTOM` 파라미터 필수 | 보호 |
 | ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 | ✅ | GET | `/api/rankings/size` | 최대 어종 크기 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
 
@@ -931,6 +933,114 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
       { "id": 1, "name": "감성돔", "imageUrl": null, "rarity": "USUALLY", "habitat": "바다", "caught": true },
       { "id": 2, "name": "붕어", "imageUrl": null, "rarity": "LOW", "habitat": "저수지", "caught": false }
     ]
+  }
+}
+```
+
+### `GET /api/collections/records` — 내 인증 기록 전체 조회 ✅ (보호)
+
+사용자가 지금까지 남긴 인증 기록을 **전부** 최신순으로 반환한다. `어종명 (크기)`를 시간순으로 쭉 나열하는 화면용이다.
+
+- **인증 필요:** `Authorization: Bearer {accessToken}`. **파라미터 없음**(신원은 토큰).
+- **기록 단위 ✅(확정).** 기존 조회가 모두 *어종 단위*(`/dex`, `?fishId=`, `/custom/dex`, `?customFishId=`)인 것과 다르다 — 감성돔을 3번 잡았다면 도감 그리드에는 칸 1개지만 이 목록에는 **줄 3개**가 뜬다.
+- **도감 인증(`catch_record`)과 도감 외 수기 등록(`custom_catch_record`)을 합쳐서 준다 ✅(확정).** 사용자에게는 둘 다 "내가 남긴 기록"이기 때문이다. 저장 테이블은 각 항목의 `recordType`(`DEX`/`CUSTOM`)으로 구분한다.
+- **개수를 자르지 않는다.** 어종 상세가 사진을 4장으로 제한하는 것과 달리 이 목록의 목적은 "전부 훑기"라, 상한을 두면 오래된 기록이 어디서도 보이지 않는다. (기록이 아주 많아지면 페이징 파라미터를 덧붙이는 형태로 확장한다.)
+- 조회 쿼리는 **2회**다(테이블당 1회, 각각 `JOIN FETCH`로 어종 동반). 병합·정렬은 서버 메모리에서 한다.
+
+#### `recordId`는 단독으로 기록을 특정하지 못한다 ⚠️(중요)
+
+두 기록 테이블의 id 가 **각각 1부터 증가**하므로 `recordId:42`인 줄이 두 개 있을 수 있다. 따라서
+
+- 단건 조회는 **`recordId` + `recordType`을 한 쌍**으로 쓴다 → `GET /api/collections/records/{recordId}?type={recordType}`.
+- 프론트의 리스트 key 도 `recordId` 단독이 아니라 **`recordType + recordId` 조합**을 써야 한다.
+
+> id 를 `"DEX-42"` 같은 문자열 하나로 합치는 방법도 검토했으나 채택하지 않았다 — 파싱이 필요하고 프론트가 id 를 숫자로 다루지 못한다. 두 필드로 나눠 두면 응답을 **그대로** 다음 요청의 파라미터로 옮길 수 있다.
+
+#### 정렬
+
+`recordedAt` **내림차순(최신순)** 고정. 같은 시각이면 `recordType` → `recordId` 내림차순으로 동점을 깬다. **서로 다른 테이블의 id 는 크기 비교에 의미가 없어**(한쪽 42가 다른 쪽 42보다 나중이라는 보장이 없다) 먼저 종류로 묶고 같은 종류 안에서만 id 로 비교한다. 무엇이 위로 오든 상관없지만 **매번 같은 순서**여야 새로고침할 때 목록이 흔들리지 않는다.
+
+#### 필드
+
+- `totalCount` = `records` 길이 = `dexCount + customCount`. 두 종류의 비율은 "도감 외 기록만 있는 사용자에게 도감을 안내" 같은 화면 분기에 쓴다.
+- `fishId`는 **`recordType`에 따라 가리키는 대상이 다르다** — `DEX`면 도감 어종 id(`GET /api/fish/{id}`·`GET /api/collections?fishId=`), `CUSTOM`이면 도감 외 어종 id(`GET /api/collections/custom?customFishId=`). 한 줄에서 "이 어종의 다른 기록도 보기"로 넘어갈 때 쓴다.
+- `recordedAt`은 촬영 시각이 아니라 **서버에 기록이 등록된 시각**이다(EXIF를 읽지 않는다). 필드명이 `verifiedAt`(도감)도 `registeredAt`(도감 외)도 아닌 이유는 **두 종류가 한 배열에 섞여** 어느 한쪽 이름을 쓰면 나머지 절반에 사실이 아닌 이름이 붙기 때문이다.
+- `location`은 선택 입력이라 `null`일 수 있다.
+- 기록이 하나도 없어도 에러가 아니다 → `200` + `totalCount:0` + `records:[]`.
+- 오류: `401`(토큰 누락·무효).
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "totalCount": 3,
+    "dexCount": 2,
+    "customCount": 1,
+    "records": [
+      {
+        "recordId": 42,
+        "recordType": "DEX",
+        "fishId": 1,
+        "fishName": "감성돔",
+        "size": 31.0,
+        "imageUrl": "https://.../fish/uuid.jpg",
+        "location": "격포항 방파제",
+        "recordedAt": "2026-09-06T18:20:04"
+      },
+      {
+        "recordId": 7,
+        "recordType": "CUSTOM",
+        "fishId": 3,
+        "fishName": "쏘가리",
+        "size": 41.0,
+        "imageUrl": "https://.../custom-fish/uuid.jpg",
+        "location": "한탄강 고석정",
+        "recordedAt": "2026-09-05T14:32:10"
+      },
+      {
+        "recordId": 41,
+        "recordType": "DEX",
+        "fishId": 4,
+        "fishName": "참돔",
+        "size": 22.5,
+        "imageUrl": "https://.../fish/uuid.jpg",
+        "location": null,
+        "recordedAt": "2026-09-01T09:11:47"
+      }
+    ]
+  }
+}
+```
+
+### `GET /api/collections/records/{recordId}` — 인증 기록 단건 조회 ✅ (보호)
+
+전체 목록의 한 줄을 눌러 들어오는 상세. 도감 인증과 도감 외 등록이 **같은 응답 모양**으로 와서 화면을 하나로 그릴 수 있다.
+
+- **인증 필요:** `Authorization: Bearer {accessToken}`.
+- **`type` 쿼리 파라미터 필수** — 값은 대문자 `DEX` / `CUSTOM`(목록 응답의 `recordType`을 그대로 넣는다). 소문자는 `400`.
+- 목록 항목에 **`habitat`(어종 서식지) 하나가 더 있는** 형태다. 목록에서는 줄마다 서식지를 그리지 않아 전체 기록 수만큼 실어 보낼 이유가 없지만, 상세는 사진을 크게 띄우며 어종 정보를 함께 보여주는 자리라 필요하다.
+  - **기록이 아니라 어종의 속성**이다 — `DEX`는 `fishes.habitat`(콘텐츠 시드가 적재), `CUSTOM`은 사용자가 등록할 때 적은 `custom_fish.habitat`. 둘 다 비어 있을 수 있어 `null` 가능하다.
+- 오류
+  - `400`: `type` 누락·허용값 이외, `recordId`가 숫자가 아닌 경우.
+  - **`C009(404)`**: **세 경우를 모두 같은 404 로 수렴시킨다 ✅(확정)** — ① 존재하지 않는 기록 ② **다른 사용자의 기록** ③ `type`이 실제 저장된 테이블과 어긋난 경우(예: `CUSTOM` 기록을 `type=DEX`로 조회). 셋을 구분해 알려주면 id 를 훑어 남이 무엇을 잡았는지 알아낼 수 있다. `C008`(도감 외 어종 상세)과 같은 정책이며, 소유자 조건을 **쿼리에 넣어**(`findWithFishByIdAndUserId`) 조회 후 비교하는 분기 자체를 없앴다.
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "recordId": 42,
+    "recordType": "DEX",
+    "fishId": 1,
+    "fishName": "감성돔",
+    "habitat": "바다",
+    "size": 31.0,
+    "imageUrl": "https://.../fish/uuid.jpg",
+    "location": "격포항 방파제",
+    "recordedAt": "2026-09-06T18:20:04"
   }
 }
 ```
