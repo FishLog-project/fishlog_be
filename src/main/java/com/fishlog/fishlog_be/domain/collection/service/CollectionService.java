@@ -1,9 +1,12 @@
 package com.fishlog.fishlog_be.domain.collection.service;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.ClassifyResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
+import com.fishlog.fishlog_be.domain.collection.entity.CatchRecordType;
 import org.springframework.web.multipart.MultipartFile;
 
 /** 사용자 도감(어종 인증) 조회 서비스. */
@@ -32,6 +35,37 @@ public interface CollectionService {
    * @return 총 수·잡은 수·어종 목록(각 항목에 caught 포함)
    */
   MyDexResponse getMyDex(Long userId);
+
+  /**
+   * 로그인 사용자가 지금까지 남긴 <b>인증 기록 전체</b>를 최신순으로 조회한다(기록 1건 = 목록 1줄).
+   *
+   * <p>{@link #getMyDex(Long)}·{@link #getMyCatch(Long, Long)}가 <b>어종 단위</b>인 것과 달리 이쪽은 <b>기록
+   * 단위</b>다 — 감성돔을 세 번 잡았으면 도감 그리드에는 칸 1개지만 여기에는 줄 3개가 뜬다. "어종명 (크기)"를 시간순으로 훑는 화면을 위한 조회다.
+   *
+   * <p><b>도감 외 어종({@code custom_catch_record}) 기록도 함께 담는다</b> — 사용자에게는 둘 다 "내가 남긴 기록"이기 때문이다. 테이블이
+   * 다르므로 각 항목의 {@code recordType}으로 구분하며, 도감 외 기록 수집은 {@link CustomCatchService}에 위임한 뒤 여기서 합쳐
+   * 정렬한다.
+   *
+   * <p>개수를 자르지 않는다. 목록의 목적이 "전부 훑기"라 상한을 두면 오래된 기록이 어디서도 보이지 않는다.
+   *
+   * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
+   * @return 기록이 하나도 없어도 예외가 아니라 빈 목록 + 0건
+   */
+  CatchHistoryResponse getMyCatchHistory(Long userId);
+
+  /**
+   * 인증 기록 <b>1건</b>의 상세를 조회한다.
+   *
+   * <p>{@code recordId}만으로는 기록을 특정할 수 없어 {@code type}을 함께 받는다 — 두 테이블 모두 id 가 1부터 증가해 값이 겹친다. 목록
+   * 응답의 {@code recordId}·{@code recordType}을 그대로 옮기면 된다. → {@link CatchRecordType}
+   *
+   * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
+   * @param recordId 조회할 기록 id
+   * @param type 그 기록이 속한 종류(도감 인증 {@code DEX} / 도감 외 {@code CUSTOM})
+   * @throws com.fishlog.fishlog_be.global.exception.CustomException 없는 기록·<b>남의 기록</b>·{@code
+   *     type}이 실제 테이블과 어긋난 경우 모두 {@code CATCH_RECORD_NOT_FOUND}(404). 셋을 구분해 알려주지 않는다
+   */
+  CatchRecordDetailResponse getMyCatchRecord(Long userId, Long recordId, CatchRecordType type);
 
   /**
    * 회원탈퇴 등으로 해당 사용자의 모든 도감 기록을 삭제한다(도감 인증 + 도감 외 어종).

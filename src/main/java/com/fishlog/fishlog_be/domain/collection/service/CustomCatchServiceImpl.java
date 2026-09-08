@@ -1,5 +1,7 @@
 package com.fishlog.fishlog_be.domain.collection.service;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryEntryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomDexEntryResponse;
@@ -121,6 +123,24 @@ public class CustomCatchServiceImpl implements CustomCatchService {
             customFishId, PageRequest.of(0, CatchRecordPolicy.RECENT_PHOTO_LIMIT));
     return CustomCatchDetailResponse.of(
         fish, (int) stats.getCatchCount(), stats.getMaxSize(), recentRecords);
+  }
+
+  @Override
+  public List<CatchHistoryEntryResponse> getMyCustomHistory(Long userId) {
+    // 목록 조회가 이미 최신순 + JOIN FETCH 라 그대로 재사용한다(쿼리 1회). 최종 순서는 호출부가 두 목록을
+    // 합친 뒤 다시 정하므로 여기서는 변환만 하고 정렬을 손대지 않는다.
+    return customCatchRecordRepository.findAllWithFishByUserId(userId).stream()
+        .map(CatchHistoryEntryResponse::from)
+        .toList();
+  }
+
+  @Override
+  public CatchRecordDetailResponse getMyCustomRecord(Long userId, Long recordId) {
+    // 소유자 조건을 쿼리에 넣어 "남의 기록"과 "없는 기록"을 같은 404 로 수렴시킨다(존재 여부도 숨긴다).
+    return customCatchRecordRepository
+        .findWithFishByIdAndUserId(recordId, userId)
+        .map(CatchRecordDetailResponse::from)
+        .orElseThrow(() -> new CustomException(CollectionErrorCode.CATCH_RECORD_NOT_FOUND));
   }
 
   @Override

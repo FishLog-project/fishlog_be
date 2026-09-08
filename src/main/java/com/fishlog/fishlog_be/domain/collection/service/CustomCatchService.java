@@ -1,8 +1,11 @@
 package com.fishlog.fishlog_be.domain.collection.service;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryEntryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyCustomDexResponse;
+import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -65,6 +68,34 @@ public interface CustomCatchService {
    *     {@code CUSTOM_FISH_NOT_FOUND}(404). 두 경우를 구분해 알려주지 않는다
    */
   CustomCatchDetailResponse getMyCustomCatch(Long userId, Long customFishId);
+
+  /**
+   * 내가 등록한 도감 외 어종 기록을 <b>기록 단위</b>로 전부 반환한다(최신순).
+   *
+   * <p>{@link #getMyCustomDex(Long)}이 어종당 한 칸으로 접어 주는 것과 달리, 이쪽은 접지 않은 기록 하나하나다. 같은 이름으로 세 번 등록했으면
+   * 세 줄이 나온다.
+   *
+   * <p><b>이 도메인의 조회 API가 아니라 {@link CollectionService#getMyCatchHistory(Long)}의 재료</b>다. 통합 목록은 도감
+   * 인증 기록과 합쳐 정렬해야 하는데, 그 병합을 여기서 하면 이 서비스가 {@code catch_record}까지 알아야 한다. 테이블 소유권을 지키기 위해 <b>자기
+   * 테이블 몫만 응답 DTO 로 변환해 넘기고</b>, 합치고 정렬하는 일은 호출부가 맡는다.
+   *
+   * @param userId 로그인 사용자 id
+   * @return 최신순 기록 목록. 없으면 빈 목록
+   */
+  List<CatchHistoryEntryResponse> getMyCustomHistory(Long userId);
+
+  /**
+   * 도감 외 어종 기록 <b>1건</b>의 상세를 조회한다({@code recordType}이 {@code CUSTOM}인 기록).
+   *
+   * <p>{@link #getMyCustomCatch(Long, Long)}과 인자 이름이 비슷하지만 <b>가리키는 대상이 다르다</b> — 저쪽은 어종({@code
+   * custom_fish}) id 로 그 어종의 기록 전체를 요약하고, 이쪽은 기록({@code custom_catch_record}) id 로 그 한 건만 본다.
+   *
+   * @param userId 로그인 사용자 id
+   * @param recordId 조회할 기록 id(통합 목록 응답의 {@code recordId})
+   * @throws com.fishlog.fishlog_be.global.exception.CustomException 기록이 없거나 <b>다른 사용자의 기록</b>이면
+   *     {@code CATCH_RECORD_NOT_FOUND}(404). 두 경우를 구분해 알려주지 않는다
+   */
+  CatchRecordDetailResponse getMyCustomRecord(Long userId, Long recordId);
 
   /**
    * 회원탈퇴 등으로 해당 사용자의 도감 외 어종 기록과 어종 목록을 모두 삭제한다.

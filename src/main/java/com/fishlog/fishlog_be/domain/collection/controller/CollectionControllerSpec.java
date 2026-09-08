@@ -1,5 +1,7 @@
 package com.fishlog.fishlog_be.domain.collection.controller;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.ClassifyResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchDetailResponse;
@@ -7,6 +9,7 @@ import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyCustomDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
+import com.fishlog.fishlog_be.domain.collection.entity.CatchRecordType;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -271,6 +274,182 @@ public interface CollectionControllerSpec {
                             """)))
   })
   BaseResponse<MyDexResponse> getMyDex(@Parameter(hidden = true) Long userId);
+
+  @Operation(
+      summary = "내 인증 기록 전체 조회",
+      security = @SecurityRequirement(name = "JWT"),
+      description =
+          """
+          ### 설명
+          - **로그인 사용자가 지금까지 남긴 인증 기록을 전부** 최신순으로 반환합니다. "어종명 (크기)"를 쭉 나열하는 화면용입니다.
+          - **기록 단위**입니다. 도감 그리드(`/dex`)나 어종 상세(`?fishId=`)가 *어종 단위*인 것과 다릅니다 —
+            감성돔을 3번 잡았다면 도감 그리드에는 칸 1개지만 이 목록에는 **줄 3개**가 뜹니다.
+          - **도감 인증 기록과 도감 외 수기 등록 기록이 함께** 옵니다. 사용자에게는 둘 다 "내가 남긴 기록"이기 때문이며,
+            각 줄의 `recordType`(`DEX` / `CUSTOM`)으로 구분합니다.
+
+          ### recordId 는 단독으로 기록을 특정하지 못합니다 (중요)
+          - 두 기록이 서로 다른 테이블에 저장되고 **양쪽 id 가 각각 1부터 증가**하므로 `recordId:42`가 두 줄에 있을 수 있습니다.
+          - 그래서 단건 조회는 **`recordId` + `recordType`을 한 쌍으로** 씁니다 →
+            `GET /api/collections/records/{recordId}?type={recordType}`. 응답의 두 필드를 그대로 옮기면 됩니다.
+          - 프론트에서 목록의 key 를 잡을 때도 `recordId` 단독이 아니라 `recordType + recordId` 조합을 쓰세요.
+
+          ### fishId 가 가리키는 대상
+          - `recordType:"DEX"` → **도감 어종 id**. `GET /api/fish/{id}`, `GET /api/collections?fishId=` 에 사용.
+          - `recordType:"CUSTOM"` → **도감 외 어종 id**. `GET /api/collections/custom?customFishId=` 에 사용.
+          - 한 줄에서 "이 어종의 다른 기록도 보기"로 넘어갈 때 씁니다.
+
+          ### 정렬 · 개수
+          - `recordedAt` **내림차순(최신순)** 고정입니다. 같은 시각이면 서버가 정한 규칙으로 동점을 깨며, **매번 같은 순서**가 보장됩니다.
+          - `recordedAt`은 촬영 시각이 아니라 **서버에 기록이 등록된 시각**입니다(EXIF를 읽지 않습니다).
+          - **개수를 자르지 않습니다.** 어종 상세가 사진을 4장으로 제한하는 것과 달리, 이 목록은 "전부 훑기"가 목적이라 전체를 내려줍니다.
+            (기록이 아주 많아져 페이징이 필요해지면 파라미터를 추가하는 형태로 확장합니다.)
+          - `totalCount` = `records` 길이 = `dexCount + customCount`.
+
+          ### 사용 방법
+          - `GET /api/collections/records` + 헤더 `Authorization: Bearer {accessToken}`
+          - 파라미터가 없습니다. 사용자 신원은 토큰에서 얻습니다.
+
+          ### ⚠ 예외상황
+          - `401`: 토큰이 없거나 무효한 경우.
+          - 기록이 하나도 없어도 **에러가 아닙니다** → `200` + `totalCount:0` + 빈 배열(`records:[]`).
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "조회 성공",
+        content =
+            @Content(
+                schema = @Schema(implementation = CatchHistoryResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "요청이 성공적으로 처리되었습니다.",
+                              "data": {
+                                "totalCount": 3,
+                                "dexCount": 2,
+                                "customCount": 1,
+                                "records": [
+                                  {
+                                    "recordId": 42,
+                                    "recordType": "DEX",
+                                    "fishId": 1,
+                                    "fishName": "감성돔",
+                                    "size": 31.0,
+                                    "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
+                                    "location": "격포항 방파제",
+                                    "recordedAt": "2026-09-06T18:20:04"
+                                  },
+                                  {
+                                    "recordId": 7,
+                                    "recordType": "CUSTOM",
+                                    "fishId": 3,
+                                    "fishName": "쏘가리",
+                                    "size": 41.0,
+                                    "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/custom-fish/uuid.jpg",
+                                    "location": "한탄강 고석정",
+                                    "recordedAt": "2026-09-05T14:32:10"
+                                  },
+                                  {
+                                    "recordId": 41,
+                                    "recordType": "DEX",
+                                    "fishId": 4,
+                                    "fishName": "참돔",
+                                    "size": 22.5,
+                                    "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
+                                    "location": null,
+                                    "recordedAt": "2026-09-01T09:11:47"
+                                  }
+                                ]
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "401",
+        description = "토큰 누락·무효",
+        content =
+            @Content(
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 401, "message": "인증이 필요합니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<CatchHistoryResponse> getMyCatchHistory(@Parameter(hidden = true) Long userId);
+
+  @Operation(
+      summary = "인증 기록 단건 조회",
+      security = @SecurityRequirement(name = "JWT"),
+      description =
+          """
+          ### 설명
+          - 인증 기록 **1건**의 상세를 반환합니다. 전체 목록(`GET /api/collections/records`)의 한 줄을 눌러 들어오는 화면용입니다.
+          - 도감 인증(`DEX`)과 도감 외 수기 등록(`CUSTOM`)이 **같은 응답 모양**으로 오므로 화면을 하나로 그릴 수 있습니다.
+          - 목록 항목에 `habitat`(어종 서식지) 하나가 더 있는 형태입니다. 기록이 아니라 **어종의 속성**이며,
+            `DEX`는 도감 시드 값, `CUSTOM`은 사용자가 등록할 때 적은 값입니다. 둘 다 비어 있을 수 있어 `null` 가능합니다.
+
+          ### 사용 방법 (type 필수)
+          - `GET /api/collections/records/{recordId}?type={recordType}` + 헤더 `Authorization: Bearer {accessToken}`
+            - 예: `GET /api/collections/records/42?type=DEX`
+          - `type`은 **필수**입니다. 두 기록 테이블의 id 가 겹치므로 `recordId` 하나로는 어느 기록인지 특정할 수 없습니다.
+          - 값은 **대문자 `DEX` / `CUSTOM`** 입니다(소문자는 `400`). 목록 응답의 `recordType`을 그대로 넣으세요.
+
+          ### ⚠ 예외상황
+          - `401`: 토큰이 없거나 무효한 경우.
+          - `400`: `type`이 누락되었거나 `DEX`·`CUSTOM` 이외의 값인 경우, `recordId`가 숫자가 아닌 경우.
+          - `C009(404)`: 다음 **세 경우를 모두 같은 404 로** 응답합니다 — 존재하지 않는 기록 / **다른 사용자의 기록** /
+            `type`이 실제 저장된 테이블과 어긋난 경우(예: `CUSTOM` 기록을 `type=DEX`로 조회).
+            셋을 구분해 알려주면 id 를 훑어 남이 무엇을 잡았는지 알아낼 수 있어 의도적으로 수렴시킵니다.
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "조회 성공",
+        content =
+            @Content(
+                schema = @Schema(implementation = CatchRecordDetailResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "요청이 성공적으로 처리되었습니다.",
+                              "data": {
+                                "recordId": 42,
+                                "recordType": "DEX",
+                                "fishId": 1,
+                                "fishName": "감성돔",
+                                "habitat": "바다",
+                                "size": 31.0,
+                                "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
+                                "location": "격포항 방파제",
+                                "recordedAt": "2026-09-06T18:20:04"
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "404",
+        description = "기록이 없거나, 남의 기록이거나, type 이 어긋난 경우",
+        content =
+            @Content(
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 404, "message": "인증 기록을 찾을 수 없습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<CatchRecordDetailResponse> getMyCatchRecord(
+      @Parameter(hidden = true) Long userId,
+      @Parameter(description = "기록 ID(목록 응답의 recordId)", example = "42") Long recordId,
+      @Parameter(description = "기록 종류(목록 응답의 recordType) — DEX / CUSTOM", example = "DEX")
+          CatchRecordType type);
 
   @Operation(
       summary = "사진으로 어종 분류 (Top-3 후보)",

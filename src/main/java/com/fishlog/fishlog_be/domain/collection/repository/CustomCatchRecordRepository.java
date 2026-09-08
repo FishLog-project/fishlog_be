@@ -2,6 +2,7 @@ package com.fishlog.fishlog_be.domain.collection.repository;
 
 import com.fishlog.fishlog_be.domain.collection.entity.CustomCatchRecord;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -26,6 +27,18 @@ public interface CustomCatchRecordRepository extends JpaRepository<CustomCatchRe
           + "WHERE c.userId = :userId "
           + "ORDER BY c.createdAt DESC, c.id DESC")
   List<CustomCatchRecord> findAllWithFishByUserId(@Param("userId") Long userId);
+
+  /**
+   * 소유자까지 함께 검증하는 단건 조회(기록 상세용). 어종을 함께 가져와 이름·서식지를 추가 쿼리 없이 쓴다.
+   *
+   * <p>어종 상세({@code CustomFishRepository#findByIdAndUserId})와 같은 이유로 소유자 조건을 쿼리에 넣는다 — "남의 기록"과 "없는
+   * 기록"을 같은 404 로 수렴시켜 존재 여부 자체를 숨긴다.
+   */
+  @Query(
+      "SELECT c FROM CustomCatchRecord c JOIN FETCH c.customFish "
+          + "WHERE c.id = :id AND c.userId = :userId")
+  Optional<CustomCatchRecord> findWithFishByIdAndUserId(
+      @Param("id") Long id, @Param("userId") Long userId);
 
   /**
    * 특정 어종의 기록을 최신순으로 조회한다(상세 화면의 최근 사진용).
