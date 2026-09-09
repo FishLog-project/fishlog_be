@@ -26,14 +26,12 @@ public interface SpotControllerSpec {
           """
           ### 설명
           - 지도 마커용 낚시 스팟 목록(id·name·lat·lot·category)을 전체 반환합니다.
-          - 각 항목에 **로그인 사용자의 찜 여부(`isFavorite`)** 를 포함합니다.
-          - 프론트(카카오맵)가 이 좌표로 마커를 표시하고, `isFavorite`로 찜 별표를 표시합니다.
+          - 프론트(카카오맵)가 이 좌표로 마커를 표시합니다.
+          - **공개 API** — 로그인 없이 조회할 수 있습니다(지도는 로그인 전에도 노출).
+          - 각 항목의 찜 여부(`isFavorite`)는 **토큰이 있으면** 해당 사용자의 찜 여부로 채우고, **토큰이 없으면 모두 `false`** 입니다.
 
           ### 제약조건
-          - **보호 API** — `Authorization: Bearer {accessToken}` 필요(찜 여부 계산을 위해).
-
-          ### ⚠ 예외상황
-          - `401`: 인증 토큰 없음/무효
+          - 인증 불필요. `Authorization: Bearer {accessToken}`를 보내면 `isFavorite`가 채워집니다(선택적 인증).
           """)
   @ApiResponses({
     @ApiResponse(
