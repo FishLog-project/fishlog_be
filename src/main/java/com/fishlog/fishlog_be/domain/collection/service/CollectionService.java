@@ -31,7 +31,11 @@ public interface CollectionService {
    *
    * <p>UI가 칸마다 이미지/그림자를 분기하도록 하기 위한 단일 조회다. 어종 목록은 전체 도감과 동일한 순서·집합이며, 잡은 어종 집합만 덧입힌다.
    *
-   * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달)
+   * <p><b>비로그인 조회를 허용한다(선택적 인증).</b> 이 조회는 "전체 도감(뼈대) + 내가 잡은 어종(오버레이)" 구조라, 비회원은 오버레이가 빈 경우일 뿐이다 —
+   * 전 칸 {@code caught=false} + 그림자 이미지 + {@code caughtCount=0}으로 내려간다. 칸을 눌렀을 때 보는 상세({@link
+   * #getMyCatch(Long, Long)})는 계속 보호 대상이라 비회원은 {@code 401}을 받는다. → docs/security.md
+   *
+   * @param userId 로그인 사용자 id(컨트롤러가 JWT 토큰에서 획득해 전달). <b>비로그인이면 {@code null}</b>
    * @return 총 수·잡은 수·어종 목록(각 항목에 caught 포함)
    */
   MyDexResponse getMyDex(Long userId);
