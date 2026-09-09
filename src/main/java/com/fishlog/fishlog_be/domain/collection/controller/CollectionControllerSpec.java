@@ -27,8 +27,11 @@ import org.springframework.web.multipart.MultipartFile;
  *
  * <p>매핑/바인딩 애너테이션은 두지 않는다. 실행부는 {@link CollectionController} 참고.
  *
- * <p><b>보호(인증) API</b>다. 모든 조회는 {@code Authorization: Bearer {accessToken}}의 로그인 사용자 기준이며, 신원은 토큰에서
- * 얻는다(별도 userId 파라미터 없음 — 남의 도감 조회 방지). 토큰 누락/무효 시 {@code 401}. → docs/security.md
+ * <p><b>대부분 보호(인증) API</b>다. 모든 조회는 {@code Authorization: Bearer {accessToken}}의 로그인 사용자 기준이며, 신원은
+ * 토큰에서 얻는다(별도 userId 파라미터 없음 — 남의 도감 조회 방지). 토큰 누락/무효 시 {@code 401}.
+ *
+ * <p><b>예외 — 전체 도감 조회({@code GET /api/collections/dex})는 공개(선택적 인증)</b>다. 비회원 둘러보기 화면에서 전 칸 그림자로
+ * 보여야 하므로 토큰 없이도 {@code 200}이며, 토큰이 있으면 잡은 칸만 어종 이미지로 바뀐다. → docs/security.md
  */
 @Tag(name = "Collection", description = "사용자 도감(어종 인증) API")
 public interface CollectionControllerSpec {
@@ -192,6 +195,8 @@ public interface CollectionControllerSpec {
           """
           ### 설명
           - 전체 수집 대상 어종을 도감 순서(어종 ID 오름차순)대로 반환하며, 각 칸에 **로그인 사용자가** 잡았는지(`caught`)를 표시합니다.
+          - **비로그인(비회원)도 조회할 수 있습니다(선택적 인증).** 토큰 없이 부르면 **모든 칸이 `caught:false` + 그림자 이미지**로 오고 `caughtCount`는 `0`입니다.
+            둘러보기 화면에서 로그인 전에도 도감 그리드를 그대로 그릴 수 있습니다.
           - **`imageUrl`은 서버가 골라서 내려줍니다** — `caught=true`면 어종 이미지, `false`면 **그림자(실루엣) 이미지**입니다.
             프론트는 분기 없이 `imageUrl`을 그대로 그리면 됩니다(`caught`는 완성도 표시·필터 등 다른 용도로 유지).
           - 이미지는 서버가 직접 서빙하는 정적 파일입니다: `{서버}/images/fish/{영문어종명}_image.png` · `{영문어종명}_shadow.png`.
@@ -201,11 +206,17 @@ public interface CollectionControllerSpec {
           - `totalCount`(전체 수집 대상 수)와 `caughtCount`(내가 잡은 수)로 도감 완성도를 함께 계산할 수 있어, 별도 조회 없이 진행도 바를 그릴 수 있습니다. → docs/ranking.md
 
           ### 사용 방법
-          - `GET /api/collections/dex` + 헤더 `Authorization: Bearer {accessToken}`
+          - `GET /api/collections/dex` — **인증 불필요.** `Authorization: Bearer {accessToken}`를 함께 보내면
+            그 사용자의 획득 여부(`caught`)가 채워집니다(보내지 않으면 전부 `false`).
           - 사용자 신원은 토큰에서 얻습니다(userId 파라미터 없음).
 
+          ### 비로그인 화면 처리 (중요)
+          - 그리드 자체는 그대로 그리면 되고, **칸을 눌렀을 때 가는 상세(`GET /api/collections?fishId=`)는 여전히 보호**입니다.
+            비로그인 상태에서는 상세를 호출하지 말고 "로그인 후 확인 가능합니다" 안내를 띄우세요(호출하면 `401`).
+          - 진행도 바는 비로그인 시 `0 / totalCount`로 표시됩니다. 로그인 유도 문구를 함께 노출하는 것을 권장합니다.
+
           ### 제약조건
-          - `fishes` 배열의 순서·집합은 전체 도감과 동일합니다(잡은 어종 여부만 덧입힘).
+          - `fishes` 배열의 순서·집합은 전체 도감과 동일합니다(잡은 어종 여부만 덧입힘). 로그인 여부와 무관하게 같습니다.
 
           ### rarity(희귀도) enum
           - `LOW` · `USUALLY` · `HIGH`
@@ -216,65 +227,84 @@ public interface CollectionControllerSpec {
           - 콘텐츠가 아직 채워지지 않은 어종은 `null`일 수 있으니 "기타" 등으로 처리하세요.
 
           ### ⚠ 예외상황
-          - `401`: 토큰이 없거나 무효한 경우.
-          - 인증 기록이 하나도 없는 사용자여도 정상 `200`(모든 칸 `caught:false`, `caughtCount:0`).
+          - **`401`은 발생하지 않습니다** — 토큰이 없어도, 무효해도 `200`(전 칸 그림자)으로 응답합니다.
+          - 인증 기록이 하나도 없는 로그인 사용자여도 정상 `200`(모든 칸 `caught:false`, `caughtCount:0`) — 비로그인 응답과 형태가 같습니다.
           """)
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
-        description = "조회 성공",
+        description = "조회 성공(비로그인 포함 — 항상 200)",
         content =
             @Content(
                 mediaType = "application/json",
-                examples =
-                    @ExampleObject(
-                        value =
-                            """
-                            {
-                              "success": true,
-                              "code": 200,
-                              "message": "요청이 성공적으로 처리되었습니다.",
-                              "data": {
-                                "totalCount": 2,
-                                "caughtCount": 1,
-                                "fishes": [
-                                  {
-                                    "id": 1,
-                                    "name": "감성돔",
-                                    "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png",
-                                    "rarity": "USUALLY",
-                                    "habitat": "바다",
-                                    "caught": true
-                                  },
-                                  {
-                                    "id": 16,
-                                    "name": "붕어",
-                                    "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png",
-                                    "rarity": "LOW",
-                                    "habitat": "저수지",
-                                    "caught": false
-                                  }
-                                ]
-                              }
+                examples = {
+                  @ExampleObject(
+                      name = "로그인(토큰 있음)",
+                      description = "잡은 칸은 어종 이미지, 못 잡은 칸은 그림자",
+                      value =
+                          """
+                          {
+                            "success": true,
+                            "code": 200,
+                            "message": "요청이 성공적으로 처리되었습니다.",
+                            "data": {
+                              "totalCount": 2,
+                              "caughtCount": 1,
+                              "fishes": [
+                                {
+                                  "id": 1,
+                                  "name": "감성돔",
+                                  "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png",
+                                  "rarity": "USUALLY",
+                                  "habitat": "바다",
+                                  "caught": true
+                                },
+                                {
+                                  "id": 16,
+                                  "name": "붕어",
+                                  "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png",
+                                  "rarity": "LOW",
+                                  "habitat": "저수지",
+                                  "caught": false
+                                }
+                              ]
                             }
-                            """))),
-    @ApiResponse(
-        responseCode = "401",
-        description = "토큰 누락/무효",
-        content =
-            @Content(
-                mediaType = "application/json",
-                examples =
-                    @ExampleObject(
-                        value =
-                            """
-                            {
-                              "success": false,
-                              "code": 401,
-                              "message": "인증이 필요합니다.",
-                              "data": null
+                          }
+                          """),
+                  @ExampleObject(
+                      name = "비로그인(토큰 없음)",
+                      description = "전 칸 그림자 + caughtCount 0. 401이 아니라 200이다",
+                      value =
+                          """
+                          {
+                            "success": true,
+                            "code": 200,
+                            "message": "요청이 성공적으로 처리되었습니다.",
+                            "data": {
+                              "totalCount": 2,
+                              "caughtCount": 0,
+                              "fishes": [
+                                {
+                                  "id": 1,
+                                  "name": "감성돔",
+                                  "imageUrl": "http://localhost:8080/images/fish/black_seabream_shadow.png",
+                                  "rarity": "USUALLY",
+                                  "habitat": "바다",
+                                  "caught": false
+                                },
+                                {
+                                  "id": 16,
+                                  "name": "붕어",
+                                  "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png",
+                                  "rarity": "LOW",
+                                  "habitat": "저수지",
+                                  "caught": false
+                                }
+                              ]
                             }
-                            """)))
+                          }
+                          """)
+                }))
   })
   BaseResponse<MyDexResponse> getMyDex(@Parameter(hidden = true) Long userId);
 

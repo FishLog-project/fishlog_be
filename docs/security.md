@@ -114,10 +114,11 @@ POST   /api/users/me/profile-image  (multipart image)             → S3 업로�
 
 ## 3. 인가 (엔드포인트 정책)
 
-- **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 스팟 **목록·상세**(`GET /api/spots`·`GET /api/spots/*`)·어종(`GET /api/fish/**`), 랭킹(`GET /api/rankings/**`), 배너(`GET /api/banner/**` — 홈 노출용 계절별 추천 어종), 관광(`GET /api/tours/**` — 위치기반 주변 관광 장소), Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
+- **공개(인증 불필요):** 인증 API 전체(`/api/auth/**`), 스팟 **목록·상세**(`GET /api/spots`·`GET /api/spots/*`)·어종(`GET /api/fish/**`), 랭킹(`GET /api/rankings/**`), 배너(`GET /api/banner/**` — 홈 노출용 계절별 추천 어종), 관광(`GET /api/tours/**` — 위치기반 주변 관광 장소), **도감 그리드(`GET /api/collections/dex`)**, Swagger(`/swagger-ui/**`·`/v3/api-docs/**`).
   - **스팟 목록 `GET /api/spots`은 공개(선택적 인증)** — 지도 마커는 로그인 전에도 노출돼야 하므로 permitAll 이다. 다만 **토큰이 있으면** 그 사용자의 찜 여부(`isFavorite`)를 채우고(필터가 principal 세팅), **없으면 모두 `false`** 로 응답한다(랭킹과 같은 "공개지만 토큰 보면 더 준다" 패턴). permitAll 매처에 `/api/spots`(정확 경로)와 `/api/spots/*`를 함께 둔다(`SecurityConfig`).
+  - **도감 그리드 `GET /api/collections/dex`도 공개(선택적 인증)** — 비회원 둘러보기에서 도감을 보여줘야 하므로 permitAll 이다. 토큰이 있으면 잡은 칸이 어종 이미지로 채워지고, **없으면 전 칸 `caught:false` + 그림자 이미지 + `caughtCount:0`** 이다(`CollectionServiceImpl.getMyDex`가 `userId == null`이면 잡은 어종 조회를 건너뛴다). ⚠️ `/api/collections` 하위에서 **이 경로만** 공개이며, 상세(`GET /api/collections?fishId=`)·기록 조회·인증 업로드는 그대로 보호다 → 비회원이 칸을 눌러 상세로 가면 `401`이고, 프론트는 "로그인 후 확인 가능" 안내로 처리한다.
   - **랭킹은 공개지만 토큰을 보면 더 준다:** 목록·Top3는 누구나 조회 가능하고, `Authorization` 헤더가 있으면 필터가 principal(userId)을 세팅해 컨트롤러가 `me`(내 순위)까지 채운다. 토큰이 없으면 `me: null`.
-- **보호(인증 필요):** 마이페이지(`GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`, `DELETE /api/users/me`, `POST /api/users/me/profile-image`), 내 도감 조회(`GET /api/collections`, `GET /api/collections/dex`), 어종 분류·인증(`POST /api/collections/classify`, `POST /api/collections/verify`), **스팟 찜(`POST`/`DELETE /api/spots/{id}/favorite`)** 등 **사용자 소유/개인화 리소스**.
+- **보호(인증 필요):** 마이페이지(`GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`, `DELETE /api/users/me`, `POST /api/users/me/profile-image`), 내 도감 상세 조회(`GET /api/collections` — 단, 그리드 `GET /api/collections/dex`는 위 공개 항목), 어종 분류·인증(`POST /api/collections/classify`, `POST /api/collections/verify`), **스팟 찜(`POST`/`DELETE /api/spots/{id}/favorite`)** 등 **사용자 소유/개인화 리소스**.
   - ⚠️ `POST /api/collections/classify`는 사용자 리소스를 읽지 않지만(저장 없는 순수 조회) 보호 엔드포인트다 — 모델 서버에 **자체 인증이 없기 때문**에 백엔드가 유일한 접근 통제 지점이다. → `docs/external.md` §2
   - 사용자 소유 리소스는 신원을 **토큰에서만** 얻는다(`@AuthenticationPrincipal`). `userId`를 요청 파라미터로 받지 않는다 — 받으면 남의 리소스를 조회할 수 있다(IDOR).
 - 보호 리소스는 `Authorization: Bearer {accessToken}` 필수. 누락/무효 → `401`.
