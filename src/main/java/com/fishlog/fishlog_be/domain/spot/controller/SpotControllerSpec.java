@@ -139,7 +139,10 @@ public interface SpotControllerSpec {
                               "prohibit": false,
                               "category": "해양",
                               "viewCount": 128,
-                              "majorFishes": ["감성돔", "참돔"],
+                              "majorFishes": [
+                                { "fishId": 1, "name": "감성돔", "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png" },
+                                { "fishId": 6, "name": "참돔", "imageUrl": "http://localhost:8080/images/fish/red_seabream_image.png" }
+                              ],
                               "forecast": {
                                 "predcYmd": "2026-08-19",
                                 "predcNoonSeCd": "오전",
@@ -171,7 +174,11 @@ public interface SpotControllerSpec {
                               "prohibit": false,
                               "category": "내륙",
                               "viewCount": 42,
-                              "majorFishes": ["붕어", "잉어", "피라미"],
+                              "majorFishes": [
+                                { "fishId": 15, "name": "붕어", "imageUrl": "http://localhost:8080/images/fish/crucian_carp_image.png" },
+                                { "fishId": 16, "name": "잉어", "imageUrl": null },
+                                { "fishId": 23, "name": "피라미", "imageUrl": null }
+                              ],
                               "forecast": null,
                               "inlandDetail": {
                                 "riverWidthMin": 70.0, "riverWidthMax": 83.0,

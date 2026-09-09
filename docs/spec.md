@@ -245,6 +245,8 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
 
 `forecast`는 **오늘 날짜(KST) + 현재 시각의 오전/오후 1건**(단일 객체). 서버가 `predcYmd == 오늘` 且 `predcNoonSeCd == 오전|오후`(현재 시각 0~11시=오전, 12시~=오후)로 필터한다.
 
+`majorFishes`는 그 스팟의 주요 대상 어종 목록으로, 각 항목은 `{ fishId, name, imageUrl }`이다. 어종은 도감(`fishes`)에 매핑된 것만 나오며(→ `major_fish`는 `fishes` FK), `imageUrl`은 `fishes.image_url` 컬럼이 아니라 **어종명 기반으로 `FishImageService`가 생성한 도감 이미지 URL**이다(도감 조회·어종 상세와 동일 방식, 파일 없으면 `null`). → `docs/media.md`
+
 `viewCount`(누적 조회수)는 이 상세 조회 시 **사용자/IP별 1일 1회** 비동기로 증가한다(GET 비차단, `@Async`). Redis dedup 키 `spot:view:dedup:{spotId}:{userId|ip}` TTL 24h — 처음 조회면 증가, 24h 내 재조회는 무시(로그인=userId / 비로그인=IP). 증가는 원자적 `UPDATE spots SET view_count = view_count + 1`. 목록(`GET /api/spots`)은 집계 대상이 아니다.
 
 ```jsonc
@@ -257,7 +259,10 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   "prohibit": false,
   "category": "해양",
   "viewCount": 128,
-  "majorFishes": ["감성돔", "참돔"],
+  "majorFishes": [                        // 주요 대상 어종(도감 어종) — fishId·name·imageUrl
+    { "fishId": 1, "name": "감성돔", "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png" },
+    { "fishId": 6, "name": "참돔",   "imageUrl": "http://localhost:8080/images/fish/red_seabream_image.png" }
+  ],
   "forecast": {
     "predcYmd": "2026-08-19", "predcNoonSeCd": "오전",
     "totalIndex": "보통",               // 낚시지수(라벨)
@@ -282,7 +287,11 @@ DB 기본정보(위치명·좌표·금지여부) + 주요 대상 어종 + **분�
   "prohibit": false,
   "category": "내륙",
   "viewCount": 42,
-  "majorFishes": ["붕어", "잉어", "피라미"],
+  "majorFishes": [                        // fishId·name·imageUrl (imageUrl은 파일 없으면 null)
+    { "fishId": 15, "name": "붕어",   "imageUrl": "http://localhost:8080/images/fish/crucian_carp_image.png" },
+    { "fishId": 16, "name": "잉어",   "imageUrl": null },
+    { "fishId": 23, "name": "피라미", "imageUrl": null }
+  ],
   "forecast": null,                     // 내륙 스팟은 항상 null
   "inlandDetail": {
     "riverWidthMin": 70.0, "riverWidthMax": 83.0,  // 하폭(m)
