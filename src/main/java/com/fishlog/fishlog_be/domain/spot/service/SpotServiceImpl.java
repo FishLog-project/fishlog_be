@@ -54,11 +54,13 @@ public class SpotServiceImpl implements SpotService {
   /**
    * 스팟이 소규모(98개)라 전체 반환으로 충분하다. 영역(bbox)·반경 검색은 규모가 커지면 도입. → docs/geo.md
    *
-   * <p>각 스팟에 로그인 사용자의 찜 여부(isFavorite)를 병합한다(찜한 spotId 집합 1쿼리 + 메모리 매핑, N+1 없음).
+   * <p>공개 API다. 로그인 사용자(토큰 有)면 각 스팟에 찜 여부(isFavorite)를 병합하고(찜한 spotId 집합 1쿼리 + 메모리 매핑, N+1 없음),
+   * 비로그인(userId=null)이면 찜 조회를 생략해 모두 false 로 응답한다.
    */
   @Override
   public List<SpotResponse> getSpots(Long userId) {
-    Set<Long> favoriteSpotIds = favoriteService.getFavoriteSpotIds(userId);
+    Set<Long> favoriteSpotIds =
+        userId == null ? Set.of() : favoriteService.getFavoriteSpotIds(userId);
     return spotRepository.findAll().stream()
         .map(spot -> SpotResponse.of(spot, favoriteSpotIds.contains(spot.getId())))
         .toList();

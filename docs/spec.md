@@ -22,7 +22,7 @@
 | ✅ | PATCH | `/api/users/me/password` | 비밀번호 변경(마이페이지, 현재 비번 확인 + 기존 세션 무효화) | 보호 |
 | ✅ | DELETE | `/api/users/me` | 회원탈퇴(현재 비번 확인, 사용자·도감기록 하드 삭제) | 보호 |
 | ✅ | POST | `/api/users/me/profile-image` | 프로필 이미지 업로드/변경(multipart, S3) | 보호 |
-| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`·`isFavorite`(찜 여부)) | 보호 |
+| ✅ | GET | `/api/spots` | 낚시 스팟 목록(지도 마커, 좌표·`category`·`isFavorite`(찜 여부)) | 공개(토큰 시 `isFavorite`) |
 | ✅ | GET | `/api/spots/popular` | 인기 스팟(조회수 Top3 — 좌표·`category`·`viewCount`·`majorFishes`) | 공개 |
 | ✅ | GET | `/api/spots/{id}` | 스팟 상세 = DB 기본정보 + 대상 어종 + **해양: 실시간 예보 / 내륙: 하천 제원(하폭·유수폭·수심)** | 공개 |
 | ✅ | POST | `/api/spots/{spotId}/favorite` | 스팟 찜 추가(idempotent) | 보호 |
@@ -199,9 +199,9 @@
 
 ### 낚시 스팟 (`/api/spots`) ✅
 
-#### `GET /api/spots` — 스팟 목록 ✅ (보호)
+#### `GET /api/spots` — 스팟 목록 ✅ (공개, 토큰 시 `isFavorite`)
 
-지도 마커용 전체 스팟(좌표·분류) + **로그인 사용자의 찜 여부(`isFavorite`)**. 찜 여부 계산을 위해 **보호 API**(`Authorization: Bearer` 필요)다. 찜한 spotId 집합을 1쿼리로 조회해 메모리 병합(N+1 없음).
+지도 마커용 전체 스팟(좌표·분류). 지도는 로그인 전에도 노출돼야 하므로 **공개 API**다. **토큰이 있으면** 그 사용자의 찜 여부(`isFavorite`)를 채우고(찜한 spotId 집합 1쿼리 + 메모리 병합, N+1 없음), **없으면 모두 `false`** 로 응답한다(선택적 인증).
 ```jsonc
 // Response(data)
 [
