@@ -37,7 +37,7 @@
 | ✅ | POST | `/api/collections/custom` | **도감 외 어종** 수기 등록(사진 + 어종명·서식지·크기·위치 직접 입력). 랭킹·도감 미반영 | 보호 |
 | ✅ | GET | `/api/collections/custom/dex` | 내 도감 외 어종 **전체** 조회(그리드 — 어종별 `catchCount`·`maxSize`) | 보호 |
 | ✅ | GET | `/api/collections/custom` | 도감 외 어종 **상세** 조회(잡은 횟수·최대 크기 + 사진 목록). `customFishId` 파라미터 | 보호 |
-| ✅ | GET | `/api/collections/dex` | 내 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 보호 |
+| ✅ | GET | `/api/collections/dex` | 어종 도감 그리드 조회(전체 어종 + 각 어종 `caught` 여부) | 공개(선택적 인증) |
 | ✅ | GET | `/api/collections/records` | 내 인증 기록 **전체** 조회(도감 + 도감 외를 합쳐 최신순, **기록 단위**). 파라미터 없음 | 보호 |
 | ✅ | GET | `/api/collections/records/{recordId}` | 인증 기록 **단건** 조회. `type=DEX\|CUSTOM` 파라미터 필수 | 보호 |
 | ✅ | GET | `/api/rankings/completion` | 도감 완성도 랭킹(전체 순위, 토큰 있으면 내 순위) → `docs/ranking.md` | 공개(`me`는 토큰 시) |
@@ -914,11 +914,14 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - 오류: `customFishId` 누락·타입 오류 `400`, **`C008(404)`** — 그런 어종이 없거나 **다른 사용자의 어종**인 경우.
   - **남의 어종은 403이 아니라 404다 ✅(확정).** 소유자 조건을 쿼리에 넣어(`findByIdAndUserId`) "없음"과 "남의 것"을 같은 결과로 수렴시킨다. 403으로 답하면 "그 id의 어종이 존재한다"는 사실이 새어 나가고, 조회 후 소유자를 비교하는 방식은 비교를 한 곳이라도 빠뜨리면 남의 기록이 그대로 노출된다.
 
-### `GET /api/collections/dex` — 내 도감 그리드 ✅ (보호)
+### `GET /api/collections/dex` — 도감 그리드 ✅ (공개, 선택적 인증)
 
 도감 화면의 그리드를 한 번에 그리기 위한 조회. **전체 수집 대상 어종을 `id` 오름차순 전체 집합으로** 반환하되, 각 칸에 내가 잡았는지(`caught`)를 덧입힌다. (어종 목록 조립은 `FishService.getFishList`를 내부 재사용한다.)
 
-- **인증 필요:** `Authorization: Bearer {accessToken}`. 파라미터 없음(신원은 토큰).
+- **인증 선택:** 파라미터 없음(신원은 토큰). `Authorization: Bearer {accessToken}`를 보내면 그 사용자의 획득 여부가 채워지고, **보내지 않으면 전 칸 `caught:false` + 그림자**로 응답한다(랭킹·스팟 목록과 같은 "공개지만 토큰을 보면 더 준다" 패턴).
+- **비회원 둘러보기 ✅(확정)** — 별도의 비회원 전용 조회를 만들지 않고 이 엔드포인트를 열었다. 이 API는 원래 `전체 도감(뼈대) + 내가 잡은 어종 집합(오버레이)` 구조라, 비회원은 **오버레이가 빈 집합인 경계값**이지 특수 케이스가 아니다. 별도 API를 두면 그리드 조립·`DexEntryResponse` 구성이 그대로 중복되고 어종 추가·그림자 규칙 변경 때 두 곳을 고쳐야 한다.
+  - 칸을 눌렀을 때의 상세(`GET /api/collections?fishId=`)는 **계속 보호**다 → 비로그인 진입 시 `401`. 프론트는 비로그인 상태에서 상세를 호출하지 말고 "로그인 후 확인 가능합니다" 안내를 띄운다.
+  - 비로그인 응답은 `caughtCount: 0`이라 진행도 바가 `0 / totalCount`로 그려진다.
 - **`imageUrl`은 서버가 골라서 내려준다 ✅(확정)** — `caught=true`면 어종 이미지(`{영문어종명}_image`), `false`면 **그림자 이미지 파일**(`{영문어종명}_shadow`)이다. 그림자를 클라이언트 이펙트로 만들지 않고 별도 파일로 준비했으므로, 어느 쪽인지 아는 서버가 URL 하나로 확정한다(프론트는 분기 없이 그대로 렌더). `caught` 플래그는 완성도 표시·필터 용도로 계속 내려준다. 미획득 어종의 **실제 이미지 URL은 응답에 실리지 않아** 스포일러도 막힌다. → `docs/media.md` §0
 - 이미지는 서버가 직접 서빙하는 **정적 파일**(`{서버}/images/fish/…`)이며 토큰 없이 접근 가능하다(`<img src>`에 그대로 사용). 아직 준비되지 않은 이미지는 `null`.
 - **어종별 "잡은 횟수"는 이 응답에 담지 않는다 ✅(확정).** 그리드는 획득/미획득만 그리고, 칸을 눌렀을 때 `GET /api/collections?fishId=`가 `catchCount`·`imageUrls`를 준다. 그리드가 쓰지 않는 값을 전체 어종 수만큼 실어 보내지 않기 위한 분리이며, 나중에 칸에 횟수 배지를 띄우기로 하면 그때 `GROUP BY fishes_id` 집계를 덧입히면 된다(쿼리 수는 그대로 1회).
@@ -935,6 +938,24 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
     "caughtCount": 12,
     "fishes": [
       { "id": 1,  "name": "감성돔", "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png", "rarity": "USUALLY", "habitat": "바다", "caught": true },
+      { "id": 16, "name": "붕어",   "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png", "rarity": "LOW", "habitat": "저수지", "caught": false }
+    ]
+  }
+}
+```
+
+비로그인(토큰 없음) 응답 — 상태 코드는 동일하게 `200`이고, 전 칸이 그림자다:
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {
+    "totalCount": 24,
+    "caughtCount": 0,
+    "fishes": [
+      { "id": 1,  "name": "감성돔", "imageUrl": "http://localhost:8080/images/fish/black_seabream_shadow.png", "rarity": "USUALLY", "habitat": "바다", "caught": false },
       { "id": 16, "name": "붕어",   "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png", "rarity": "LOW", "habitat": "저수지", "caught": false }
     ]
   }
