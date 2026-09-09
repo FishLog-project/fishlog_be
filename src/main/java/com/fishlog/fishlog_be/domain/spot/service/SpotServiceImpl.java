@@ -3,6 +3,7 @@ package com.fishlog.fishlog_be.domain.spot.service;
 import com.fishlog.fishlog_be.domain.favorite.service.FavoriteService;
 import com.fishlog.fishlog_be.domain.spot.dto.ForecastResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.InlandDetailResponse;
+import com.fishlog.fishlog_be.domain.spot.dto.MajorFishResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.PopularSpotResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotDetailResponse;
 import com.fishlog.fishlog_be.domain.spot.dto.SpotResponse;
@@ -16,6 +17,7 @@ import com.fishlog.fishlog_be.domain.spot.repository.SpotRepository;
 import com.fishlog.fishlog_be.global.exception.CustomException;
 import com.fishlog.fishlog_be.global.forecast.ForecastService;
 import com.fishlog.fishlog_be.global.forecast.dto.SpotForecast;
+import com.fishlog.fishlog_be.global.image.FishImageService;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -50,6 +52,8 @@ public class SpotServiceImpl implements SpotService {
   // 도메인 경계: 예보 외부연동·찜은 각 service 인터페이스로만 접근.
   private final ForecastService forecastService;
   private final FavoriteService favoriteService;
+  // 도감 이미지 URL은 DB 컬럼이 아니라 어종명 기반으로 생성한다(도감 조회와 동일 방식).
+  private final FishImageService fishImageService;
 
   /**
    * 스팟이 소규모(98개)라 전체 반환으로 충분하다. 영역(bbox)·반경 검색은 규모가 커지면 도입. → docs/geo.md
@@ -89,7 +93,7 @@ public class SpotServiceImpl implements SpotService {
             .findById(id)
             .orElseThrow(() -> new CustomException(SpotErrorCode.SPOT_NOT_FOUND));
 
-    List<String> majorFishes = majorFishNames(spot);
+    List<MajorFishResponse> majorFishes = majorFishes(spot);
 
     // 분류별 상세는 배타적이다: 해양=실시간 예보, 내륙=하천 제원(실측 저장값).
     // 예보는 오늘 날짜(KST) + 현재 시각의 오전/오후 1건만 노출한다.
@@ -111,11 +115,22 @@ public class SpotServiceImpl implements SpotService {
         inlandDetail);
   }
 
-  /** 스팟의 주요 대상 어종명 목록(major_fish 매핑). 상세·인기 스팟 응답 공용. */
+  /** 스팟의 주요 대상 어종명 목록(major_fish 매핑). 인기 스팟(목록성) 응답용. */
   private List<String> majorFishNames(Spot spot) {
     return majorFishRepository.findBySpot(spot).stream()
         .map(MajorFish::getFish)
         .map(f -> f.getName())
+        .toList();
+  }
+
+  /**
+   * 스팟의 주요 대상 어종(도감 정보 포함) 목록. 상세 응답용 — 각 어종의 id·name·imageUrl 을 담는다. major_fish 는 도감({@code
+   * fishes})에 대한 FK 라 여기 나오는 어종은 모두 도감 어종이다.
+   */
+  private List<MajorFishResponse> majorFishes(Spot spot) {
+    return majorFishRepository.findBySpot(spot).stream()
+        .map(MajorFish::getFish)
+        .map(fish -> MajorFishResponse.of(fish, fishImageService.getFishImageUrl(fish.getName())))
         .toList();
   }
 
