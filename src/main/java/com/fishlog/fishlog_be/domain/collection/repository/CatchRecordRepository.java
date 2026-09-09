@@ -2,6 +2,7 @@ package com.fishlog.fishlog_be.domain.collection.repository;
 
 import com.fishlog.fishlog_be.domain.collection.entity.CatchRecord;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -20,6 +21,34 @@ public interface CatchRecordRepository extends JpaRepository<CatchRecord, Long> 
    */
   List<CatchRecord> findByUserIdAndFish_IdOrderByCreatedAtDescIdDesc(
       Long userId, Long fishId, Pageable pageable);
+
+  /**
+   * 특정 사용자의 인증 기록 <b>전체</b>를 최신순으로, 어종을 함께 조회한다(기록 목록 화면용).
+   *
+   * <p>도감 상세 조회와 달리 개수를 자르지 않는다 — 목록 화면의 목적 자체가 "지금까지 남긴 기록을 전부 훑는 것"이라 상한을 두면 오래된 기록이 어디서도 보이지 않게
+   * 된다. 한 사용자의 기록은 많아야 수백 건이라 한 번에 실어 보낸다(페이징이 필요해지면 {@code Pageable} 오버로드를 덧붙인다).
+   *
+   * <p>{@code JOIN FETCH}로 어종을 같이 끌고 온다 — 항목마다 어종명을 쓰므로, 없으면 지연 로딩이 기록 수만큼 추가 쿼리를 낸다(N+1).
+   *
+   * <p>정렬에 {@code id DESC}를 덧붙이는 이유는 다른 조회와 같다 — {@code createdAt}이 같은 순간의 기록끼리 순서가 매번 뒤바뀌지 않도록 id
+   * 로 동점을 깬다. 다만 이 결과는 도감 외 기록과 <b>합쳐진 뒤 다시 정렬</b>되므로(서비스), 최종 순서를 여기서 단독으로 보장하지는 않는다.
+   */
+  @Query(
+      "SELECT c FROM CatchRecord c JOIN FETCH c.fish "
+          + "WHERE c.userId = :userId "
+          + "ORDER BY c.createdAt DESC, c.id DESC")
+  List<CatchRecord> findAllWithFishByUserId(@Param("userId") Long userId);
+
+  /**
+   * 소유자까지 함께 검증하는 단건 조회(기록 상세용). 어종을 함께 가져와 이름·서식지를 추가 쿼리 없이 쓴다.
+   *
+   * <p>{@code findById} 후 {@code userId}를 비교하는 방식을 쓰지 않는다 — "남의 기록"과 "없는 기록"이 코드상 다른 분기가 되어, 한쪽을
+   * 빠뜨리면 남의 기록이 그대로 새어 나간다. 조건을 쿼리에 넣어 두 경우 모두 빈 결과 → 같은 404 로 수렴시킨다. → {@code
+   * CustomFishRepository#findByIdAndUserId}
+   */
+  @Query("SELECT c FROM CatchRecord c JOIN FETCH c.fish WHERE c.id = :id AND c.userId = :userId")
+  Optional<CatchRecord> findWithFishByIdAndUserId(
+      @Param("id") Long id, @Param("userId") Long userId);
 
   /**
    * 특정 사용자가 특정 어종을 인증한 횟수.

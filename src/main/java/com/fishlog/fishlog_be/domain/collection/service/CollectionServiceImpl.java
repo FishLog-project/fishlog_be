@@ -1,5 +1,8 @@
 package com.fishlog.fishlog_be.domain.collection.service;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryEntryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.ClassifyResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.DexEntryResponse;
@@ -7,6 +10,8 @@ import com.fishlog.fishlog_be.domain.collection.dto.FishCandidateResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
 import com.fishlog.fishlog_be.domain.collection.entity.CatchRecord;
+import com.fishlog.fishlog_be.domain.collection.entity.CatchRecordType;
+import com.fishlog.fishlog_be.domain.collection.exception.CollectionErrorCode;
 import com.fishlog.fishlog_be.domain.collection.policy.CatchRecordPolicy;
 import com.fishlog.fishlog_be.domain.collection.repository.CatchRecordRepository;
 import com.fishlog.fishlog_be.domain.collection.repository.CatchStats;
@@ -84,6 +89,36 @@ public class CollectionServiceImpl implements CollectionService {
                 })
             .toList();
     return MyDexResponse.of(entries);
+  }
+
+  @Override
+  public CatchHistoryResponse getMyCatchHistory(Long userId) {
+    // 도감 인증 기록(내 테이블) + 도감 외 기록(형제 서비스에 위임) — 각각 최신순이지만 합치는 순간 순서가
+    // 깨지므로 합친 뒤 다시 정렬한다. 두 목록을 병합 정렬하지 않고 단순 정렬하는 이유는, 서로 다른
+    // 테이블의 id 로는 동시각 동점을 비교할 수 없어 어차피 비교자가 필요하기 때문이다.
+    List<CatchHistoryEntryResponse> entries =
+        new ArrayList<>(
+            catchRecordRepository.findAllWithFishByUserId(userId).stream()
+                .map(CatchHistoryEntryResponse::from)
+                .toList());
+    entries.addAll(customCatchService.getMyCustomHistory(userId));
+    entries.sort(CatchHistoryEntryResponse.LATEST_FIRST);
+    return CatchHistoryResponse.of(entries);
+  }
+
+  @Override
+  public CatchRecordDetailResponse getMyCatchRecord(
+      Long userId, Long recordId, CatchRecordType type) {
+    // type 이 어느 테이블을 볼지 가른다. 잘못된 type 으로 오면 그 테이블에 해당 id 가 없어 404 가 되는데,
+    // 이는 "없는 기록"과 같은 응답이라 의도한 결과다(어느 쪽에 존재하는지도 알려주지 않는다).
+    return switch (type) {
+      case DEX ->
+          catchRecordRepository
+              .findWithFishByIdAndUserId(recordId, userId)
+              .map(CatchRecordDetailResponse::from)
+              .orElseThrow(() -> new CustomException(CollectionErrorCode.CATCH_RECORD_NOT_FOUND));
+      case CUSTOM -> customCatchService.getMyCustomRecord(userId, recordId);
+    };
   }
 
   @Override

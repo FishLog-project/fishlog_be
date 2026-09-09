@@ -33,15 +33,16 @@ com.fishlog.fishlog_be
 │  │  ├─ entity/Fish.java · Rarity.java · Season.java(월→계절·제철 플래그 매칭)
 │  │  ├─ repository/FishRepository.java
 │  │  └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
-│  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행 + 도감 외 어종 수기 등록
-│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex, /custom/dex, /custom?customFishId= · POST /classify, /verify, /custom (모두 보호)
-│  │  ├─ service/CollectionService.java · CollectionServiceImpl.java
-│  │  ├─ service/CustomCatchService.java · CustomCatchServiceImpl.java  # 도감 외 어종 등록(find-or-create)·전체/상세 조회·탈퇴 정리(CollectionService가 위임)
+│  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행 + 도감 외 어종 수기 등록 + 기록 단위 통합 조회
+│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex, /custom/dex, /custom?customFishId=, /records, /records/{recordId}?type= · POST /classify, /verify, /custom (모두 보호)
+│  │  ├─ service/CollectionService.java · CollectionServiceImpl.java  # 도감 조회·분류·인증 + 기록 단위 통합 목록/단건(두 테이블 병합·type 라우팅)
+│  │  ├─ service/CustomCatchService.java · CustomCatchServiceImpl.java  # 도감 외 어종 등록(find-or-create)·전체/상세 조회·기록 단위 목록/단건·탈퇴 정리(CollectionService가 위임)
 │  │  ├─ policy/CatchRecordPolicy.java                 # 크기·위치·어종명·서식지 검증/정규화 + 최근 사진 4장 상한 (verify·custom 공유)
 │  │  ├─ dto/CatchRecordResponse · CatchPhotoResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
 │  │  │      · CustomCatchResponse · MyCustomDexResponse · CustomDexEntryResponse · CustomCatchDetailResponse · CustomCatchPhotoResponse
-│  │  ├─ entity/CatchRecord.java · CustomFish.java · CustomCatchRecord.java  # 뒤 둘은 사용자별 어종 카탈로그 + 그 기록(랭킹·도감 집계에서 제외)
-│  │  ├─ exception/CollectionErrorCode.java            # C001~C003(크기·위치) · C004~C008(도감 외 어종명·서식지·조회)
+│  │  │      · CatchHistoryResponse · CatchHistoryEntryResponse(정렬 기준 LATEST_FIRST 보유) · CatchRecordDetailResponse  # 기록 단위 통합 조회
+│  │  ├─ entity/CatchRecord.java · CustomFish.java · CustomCatchRecord.java · CatchRecordType.java  # 가운데 둘은 사용자별 어종 카탈로그 + 그 기록(랭킹·도감 집계에서 제외), 끝은 DEX/CUSTOM 구분 enum(@Entity 아님 — 응답·파라미터 전용)
+│  │  ├─ exception/CollectionErrorCode.java            # C001~C003(크기·위치) · C004~C008(도감 외 어종명·서식지·조회) · C009(기록 단건 조회)
 │  │  └─ repository/CatchRecordRepository.java · CustomFishRepository.java · CustomCatchRecordRepository.java · CatchStats.java(횟수+최대크기 projection, 두 기록 테이블 공용) · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
 │  ├─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
 │  │  ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
@@ -129,7 +130,7 @@ domain
 │  └─ exception/UserErrorCode.java        📋
 ├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록·상세
 ├─ fish                     # 어종 정보                                      ✅
-├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드·도감 외 어종 수기 등록
+├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드·도감 외 어종 수기 등록·기록 단위 통합 조회
 ├─ ranking                  # 사용자 랭킹 (→ docs/ranking.md)                 ✅
 ├─ favorite                 # 스팟 찜 (사용자↔스팟 N:M)                       ✅
 ├─ banner                   # 홈 배너 (계절별 추천 어종 — fish 조합, 전용 테이블 없음) ✅
