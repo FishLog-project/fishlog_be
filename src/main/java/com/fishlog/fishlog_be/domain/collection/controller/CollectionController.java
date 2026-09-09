@@ -41,6 +41,8 @@ public class CollectionController implements CollectionControllerSpec {
     return BaseResponse.success(collectionService.getMyCatch(userId, fishId));
   }
 
+  // 이 도메인에서 유일한 공개 엔드포인트(SecurityConfig permitAll). 비로그인이면 principal 타입이 맞지 않아
+  // userId 가 null 로 바인딩되고, 서비스가 그때 전 칸 그림자를 만든다 — 시그니처는 로그인 때와 동일하다.
   @Override
   @GetMapping("/dex")
   public BaseResponse<MyDexResponse> getMyDex(@AuthenticationPrincipal Long userId) {

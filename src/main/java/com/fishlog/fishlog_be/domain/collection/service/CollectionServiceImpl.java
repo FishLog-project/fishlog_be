@@ -75,7 +75,13 @@ public class CollectionServiceImpl implements CollectionService {
     // 1) 전체 도감(수집 대상 어종)을 fish 서비스에서 그대로 가져온다(순서·집합 동일).
     List<FishSummaryResponse> dex = fishService.getFishList(null).fishes();
     // 2) 내가 잡은 어종 id 집합(중복 제거) → 칸마다 O(1) 판정용.
-    Set<Long> caughtIds = new HashSet<>(catchRecordRepository.findDistinctCaughtFishIds(userId));
+    //    비로그인(userId == null)이면 조회 자체를 건너뛰고 빈 집합을 쓴다 — 이 엔드포인트는 공개라
+    //    userId 가 없을 수 있고, null 을 그대로 넘기면 아무와도 매칭되지 않는 쿼리를 헛돌린다.
+    //    빈 집합이면 아래 병합이 자연히 "전부 그림자 + caughtCount 0"을 만든다(분기 추가 불필요).
+    Set<Long> caughtIds =
+        userId == null
+            ? Set.of()
+            : new HashSet<>(catchRecordRepository.findDistinctCaughtFishIds(userId));
     // 3) 두 결과를 병합해 각 칸에 caught 와 "그 칸에 그릴 이미지"를 덧입힌다(N+1 없이 메모리 조합).
     //    못 잡은 칸은 어종 이미지 대신 그림자 이미지를 내려 준다 — 실제 어종 이미지 URL 은 응답에 싣지 않는다(스포일러 방지).
     List<DexEntryResponse> entries =
