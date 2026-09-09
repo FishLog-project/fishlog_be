@@ -16,6 +16,10 @@ import org.springframework.http.HttpStatus;
  * 저장에 성공시키는 대신 400으로 끊어 도감 인증({@code /verify})으로 유도한다.
  *
  * <p>{@code C008}은 <b>남의 어종을 조회한 경우도 포함</b>한다. 소유자가 다르면 403이 아니라 404 로 답해 어종의 존재 여부 자체를 알려주지 않는다.
+ *
+ * <p>{@code C009}는 기록 단건 조회({@code GET /api/collections/records/&#123;recordId&#125;})용이며 같은 규칙을
+ * 따른다 — <b>없는 기록·남의 기록·{@code type}이 실제 테이블과 어긋난 경우를 모두 하나의 404 로 수렴</b>시킨다. 셋을 구분해 알려주면 id 를 훑어 남이
+ * 무엇을 잡았는지 알아낼 수 있다.
  */
 @Getter
 @AllArgsConstructor
@@ -27,7 +31,8 @@ public enum CollectionErrorCode implements BaseErrorCode {
   FISH_NAME_TOO_LONG("C005", "어종명은 30자 이하로 입력해주세요.", HttpStatus.BAD_REQUEST),
   FISH_ALREADY_IN_DEX("C006", "이미 도감에 있는 어종입니다. 어종 인증으로 등록해주세요.", HttpStatus.BAD_REQUEST),
   HABITAT_TOO_LONG("C007", "주요 서식지는 20자 이하로 입력해주세요.", HttpStatus.BAD_REQUEST),
-  CUSTOM_FISH_NOT_FOUND("C008", "등록한 도감 외 어종을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
+  CUSTOM_FISH_NOT_FOUND("C008", "등록한 도감 외 어종을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
+  CATCH_RECORD_NOT_FOUND("C009", "인증 기록을 찾을 수 없습니다.", HttpStatus.NOT_FOUND);
 
   private final String code;
   private final String message;

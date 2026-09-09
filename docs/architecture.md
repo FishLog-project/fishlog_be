@@ -33,15 +33,16 @@ com.fishlog.fishlog_be
 │  │  ├─ entity/Fish.java · Rarity.java · Season.java(월→계절·제철 플래그 매칭)
 │  │  ├─ repository/FishRepository.java
 │  │  └─ exception/FishErrorCode.java       # F001 FISH_NOT_FOUND
-│  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행 + 도감 외 어종 수기 등록
-│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex, /custom/dex, /custom?customFishId= · POST /classify, /verify, /custom (모두 보호)
-│  │  ├─ service/CollectionService.java · CollectionServiceImpl.java
-│  │  ├─ service/CustomCatchService.java · CustomCatchServiceImpl.java  # 도감 외 어종 등록(find-or-create)·전체/상세 조회·탈퇴 정리(CollectionService가 위임)
+│  ├─ collection                 # 사용자 도감(어종 인증 기록) — 인증 1건=1행 + 도감 외 어종 수기 등록 + 기록 단위 통합 조회
+│  │  ├─ controller/CollectionController.java (+Spec)  # GET /api/collections?fishId=, /dex, /custom/dex, /custom?customFishId=, /records, /records/{recordId}?type= · POST /classify, /verify, /custom (모두 보호)
+│  │  ├─ service/CollectionService.java · CollectionServiceImpl.java  # 도감 조회·분류·인증 + 기록 단위 통합 목록/단건(두 테이블 병합·type 라우팅)
+│  │  ├─ service/CustomCatchService.java · CustomCatchServiceImpl.java  # 도감 외 어종 등록(find-or-create)·전체/상세 조회·기록 단위 목록/단건·탈퇴 정리(CollectionService가 위임)
 │  │  ├─ policy/CatchRecordPolicy.java                 # 크기·위치·어종명·서식지 검증/정규화 + 최근 사진 4장 상한 (verify·custom 공유)
 │  │  ├─ dto/CatchRecordResponse · CatchPhotoResponse · MyDexResponse · DexEntryResponse · ClassifyResponse · FishCandidateResponse · VerifyResponse
 │  │  │      · CustomCatchResponse · MyCustomDexResponse · CustomDexEntryResponse · CustomCatchDetailResponse · CustomCatchPhotoResponse
-│  │  ├─ entity/CatchRecord.java · CustomFish.java · CustomCatchRecord.java  # 뒤 둘은 사용자별 어종 카탈로그 + 그 기록(랭킹·도감 집계에서 제외)
-│  │  ├─ exception/CollectionErrorCode.java            # C001~C003(크기·위치) · C004~C008(도감 외 어종명·서식지·조회)
+│  │  │      · CatchHistoryResponse · CatchHistoryEntryResponse(정렬 기준 LATEST_FIRST 보유) · CatchRecordDetailResponse  # 기록 단위 통합 조회
+│  │  ├─ entity/CatchRecord.java · CustomFish.java · CustomCatchRecord.java · CatchRecordType.java  # 가운데 둘은 사용자별 어종 카탈로그 + 그 기록(랭킹·도감 집계에서 제외), 끝은 DEX/CUSTOM 구분 enum(@Entity 아님 — 응답·파라미터 전용)
+│  │  ├─ exception/CollectionErrorCode.java            # C001~C003(크기·위치) · C004~C008(도감 외 어종명·서식지·조회) · C009(기록 단건 조회)
 │  │  └─ repository/CatchRecordRepository.java · CustomFishRepository.java · CustomCatchRecordRepository.java · CatchStats.java(횟수+최대크기 projection, 두 기록 테이블 공용) · UserFishCount.java · UserMaxSize.java  # 뒤 둘은 랭킹 집계 projection
 │  ├─ ranking                    # 사용자 랭킹(완성도·최대 크기) — 파생 집계만, 전용 테이블 없음
 │  │  ├─ controller/RankingController.java (+Spec)  # GET /api/rankings/completion, /size (공개, me는 토큰 시)
@@ -64,9 +65,10 @@ com.fishlog.fishlog_be
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
-   ├─ config                                  # AsyncConfig(@Async), CorsConfig, PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), S3Config(S3Client), SwaggerConfig(JWT 스킴)
+   ├─ config                                  # AsyncConfig(@Async), CorsConfig, ImageResourceConfig(/images/fish/** 정적 서빙), PasswordConfig(BCrypt), RedisConfig(캐시·인증 저장), RestClientConfig(외부 HTTP 타임아웃), S3Config(S3Client), SwaggerConfig(JWT 스킴)
    ├─ jwt                                     # JwtProvider, JwtAuthenticationFilter
    ├─ security                                # SecurityConfig, CustomUserDetails(Service), JwtAuthenticationEntryPoint(401), JwtAccessDeniedHandler(403)
+   ├─ image                                   # 도감 이미지 URL 제공 — FishImageService(+Impl). data/fish/images/ 를 기동 시 스캔해 어종 id → 절대 URL 생성(어종/그림자/기본 이미지) → docs/media.md §0
    ├─ ai                                      # 어종 분류 모델 서버 연동 — FishClassifyClient(+Impl)·AiErrorCode(AI001~AI008)·dto/PredictResponse·PredictionItem → docs/external.md §2
    ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName(profile/·fish/·custom-fish/)·S3ErrorCode → docs/media.md
    ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
@@ -128,7 +130,7 @@ domain
 │  └─ exception/UserErrorCode.java        📋
 ├─ spot                     # 낚시 스팟 (좌표·주변 검색 → docs/geo.md)        ✅ 목록·상세
 ├─ fish                     # 어종 정보                                      ✅
-├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드·도감 외 어종 수기 등록
+├─ collection               # 어종 도감·사진 인증 (게이미피케이션 → docs/media.md) ✅ 조회·AI 분류·인증 업로드·도감 외 어종 수기 등록·기록 단위 통합 조회
 ├─ ranking                  # 사용자 랭킹 (→ docs/ranking.md)                 ✅
 ├─ favorite                 # 스팟 찜 (사용자↔스팟 N:M)                       ✅
 ├─ banner                   # 홈 배너 (계절별 추천 어종 — fish 조합, 전용 테이블 없음) ✅
@@ -239,12 +241,13 @@ public class SpotController implements SpotControllerSpec {
 | `common` | 공통 상위 엔티티 등(`BaseTimeEntity`) | ✅ |
 | `response` | 공통 응답 래퍼(`BaseResponse`) | ✅ |
 | `exception` (+`model`) | 전역 예외 처리·공통 에러 코드(`GlobalExceptionHandler`, `GlobalErrorCode`, `model/BaseErrorCode`) | ✅ |
-| `config` | Spring `@Configuration` 모음 — `AsyncConfig`(@Async)·`CorsConfig`·`PasswordConfig`(BCrypt)·`RedisConfig`(캐시·인증코드 저장)·`RestClientConfig`(외부 HTTP 타임아웃)·`SwaggerConfig`(OpenAPI + Bearer JWT 스킴) | ✅ |
+| `config` | Spring `@Configuration` 모음 — `AsyncConfig`(@Async)·`CorsConfig`·`ImageResourceConfig`(도감 이미지 `/images/fish/**` 정적 서빙)·`PasswordConfig`(BCrypt)·`RedisConfig`(캐시·인증코드 저장)·`RestClientConfig`(외부 HTTP 타임아웃)·`SwaggerConfig`(OpenAPI + Bearer JWT 스킴) | ✅ |
 | `security` | Spring Security 설정·인증 진입점·`UserDetails` (`SecurityConfig`, `CustomUserDetails(Service)`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`) → docs/security.md | ✅ |
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
 | `tour` | 관광 정보(TourAPI KorService2) 외부연동 — `TourApiClient`(+Impl)·`TourErrorCode`·`dto/TourApiItem`·`TourApiResult`. 위치기반 관광 장소를 **매 요청 실시간 호출**(캐시·DB 없음) → docs/external.md §2 | ✅ |
 | `ai` | 어종 분류 모델 서버 연동 — `FishClassifyClient`(+`Impl`)·`AiErrorCode`·`dto/PredictResponse`. multipart 로 원본 바이트 전송, 4xx 무재시도 / 5xx·타임아웃 1회 재시도 → docs/external.md §2 | ✅ |
+| `image` | 도감 이미지(어종·그림자·도감 외 어종 기본) URL 제공 — `FishImageService`(+`Impl`). **DB 컬럼이 아니라 어종 id로 파일명을 규칙 생성**하고, 파일은 `data/fish/images/`에 두어 `ImageResourceConfig`가 `/images/fish/**`로 정적 서빙한다 (→ docs/media.md §0) | ✅ |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필(`profile/`)·어종 인증(`fish/`)·도감 외 어종(`custom-fish/`) 사진 적용 (docs/media.md) | ✅ |
 | `init` | 시드/초기 데이터 로더(`SeedDataInitializer`·`SeedDataReader`·`SpotSeedLoader`·`FishContentSeedLoader`·`InlandDetailSeedLoader`, `dto/`). 시드 JSON은 프로젝트 루트 `data/`에 위치(서브모듈 아님) → `docs/spec.md` | ✅ |
 | `validator` | 커스텀 Bean Validation 애너테이션·검증기 | 📋 |

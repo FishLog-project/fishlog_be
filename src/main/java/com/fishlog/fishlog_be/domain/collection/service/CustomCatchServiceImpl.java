@@ -1,5 +1,7 @@
 package com.fishlog.fishlog_be.domain.collection.service;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryEntryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomDexEntryResponse;
@@ -13,6 +15,7 @@ import com.fishlog.fishlog_be.domain.collection.repository.CustomCatchRecordRepo
 import com.fishlog.fishlog_be.domain.collection.repository.CustomFishRepository;
 import com.fishlog.fishlog_be.domain.fish.service.FishService;
 import com.fishlog.fishlog_be.global.exception.CustomException;
+import com.fishlog.fishlog_be.global.image.FishImageService;
 import com.fishlog.fishlog_be.global.s3.PathName;
 import com.fishlog.fishlog_be.global.s3.S3Service;
 import java.util.ArrayList;
@@ -37,6 +40,8 @@ public class CustomCatchServiceImpl implements CustomCatchService {
   // 도감에 이미 있는 이름인지 확인하는 용도로만 쓴다(도메인 간 접근은 service 인터페이스로).
   private final FishService fishService;
   private final S3Service s3Service;
+  // 그리드 대표 이미지로 쓸 도감 외 어종 공통 기본 이미지 URL 제공자.
+  private final FishImageService fishImageService;
 
   @Override
   @Transactional
@@ -91,7 +96,6 @@ public class CustomCatchServiceImpl implements CustomCatchService {
     List<CustomCatchRecord> records = customCatchRecordRepository.findAllWithFishByUserId(userId);
 
     // LinkedHashMap: 삽입 순서 = 최신순 목록에서 그 어종이 처음 나온 순서 = "가장 최근에 잡은 어종"부터.
-    // 그룹 내부도 최신순이 유지되므로 맨 앞이 대표 이미지가 된다.
     Map<Long, List<CustomCatchRecord>> grouped = new LinkedHashMap<>();
     Map<Long, CustomFish> fishes = new LinkedHashMap<>();
     for (CustomCatchRecord record : records) {
@@ -100,9 +104,14 @@ public class CustomCatchServiceImpl implements CustomCatchService {
       grouped.computeIfAbsent(fish.getId(), id -> new ArrayList<>()).add(record);
     }
 
+    // 대표 이미지는 어종과 무관하게 모두 같은 기본 이미지라 한 번만 만들어 재사용한다.
+    String basicImageUrl = fishImageService.getBasicImageUrl();
     List<CustomDexEntryResponse> entries =
         grouped.entrySet().stream()
-            .map(entry -> CustomDexEntryResponse.of(fishes.get(entry.getKey()), entry.getValue()))
+            .map(
+                entry ->
+                    CustomDexEntryResponse.of(
+                        fishes.get(entry.getKey()), entry.getValue(), basicImageUrl))
             .toList();
     return MyCustomDexResponse.of(entries);
   }
@@ -121,6 +130,24 @@ public class CustomCatchServiceImpl implements CustomCatchService {
             customFishId, PageRequest.of(0, CatchRecordPolicy.RECENT_PHOTO_LIMIT));
     return CustomCatchDetailResponse.of(
         fish, (int) stats.getCatchCount(), stats.getMaxSize(), recentRecords);
+  }
+
+  @Override
+  public List<CatchHistoryEntryResponse> getMyCustomHistory(Long userId) {
+    // 목록 조회가 이미 최신순 + JOIN FETCH 라 그대로 재사용한다(쿼리 1회). 최종 순서는 호출부가 두 목록을
+    // 합친 뒤 다시 정하므로 여기서는 변환만 하고 정렬을 손대지 않는다.
+    return customCatchRecordRepository.findAllWithFishByUserId(userId).stream()
+        .map(CatchHistoryEntryResponse::from)
+        .toList();
+  }
+
+  @Override
+  public CatchRecordDetailResponse getMyCustomRecord(Long userId, Long recordId) {
+    // 소유자 조건을 쿼리에 넣어 "남의 기록"과 "없는 기록"을 같은 404 로 수렴시킨다(존재 여부도 숨긴다).
+    return customCatchRecordRepository
+        .findWithFishByIdAndUserId(recordId, userId)
+        .map(CatchRecordDetailResponse::from)
+        .orElseThrow(() -> new CustomException(CollectionErrorCode.CATCH_RECORD_NOT_FOUND));
   }
 
   @Override

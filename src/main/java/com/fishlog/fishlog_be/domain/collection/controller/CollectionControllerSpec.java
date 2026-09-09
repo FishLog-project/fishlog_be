@@ -1,5 +1,7 @@
 package com.fishlog.fishlog_be.domain.collection.controller;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.ClassifyResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchDetailResponse;
@@ -7,6 +9,7 @@ import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyCustomDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
+import com.fishlog.fishlog_be.domain.collection.entity.CatchRecordType;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -189,7 +192,10 @@ public interface CollectionControllerSpec {
           """
           ### 설명
           - 전체 수집 대상 어종을 도감 순서(어종 ID 오름차순)대로 반환하며, 각 칸에 **로그인 사용자가** 잡았는지(`caught`)를 표시합니다.
-          - `caught=true`면 도감 이미지를, `false`면 같은 이미지를 그림자(실루엣)로 렌더하도록 프론트가 분기합니다(그림자는 클라이언트 이펙트, 서버는 플래그만 내려줌).
+          - **`imageUrl`은 서버가 골라서 내려줍니다** — `caught=true`면 어종 이미지, `false`면 **그림자(실루엣) 이미지**입니다.
+            프론트는 분기 없이 `imageUrl`을 그대로 그리면 됩니다(`caught`는 완성도 표시·필터 등 다른 용도로 유지).
+          - 이미지는 서버가 직접 서빙하는 정적 파일입니다: `{서버}/images/fish/{영문어종명}_image.png` · `{영문어종명}_shadow.png`.
+            토큰 없이 접근 가능하므로 `<img src>`에 그대로 넣을 수 있습니다. 아직 준비되지 않은 이미지는 `null`입니다.
           - **잡은 횟수·인증 사진은 이 응답에 없습니다.** 그리드는 획득/미획득만 그리고, 칸을 눌렀을 때
             `GET /api/collections?fishId={id}`로 해당 어종의 `catchCount`·`imageUrls`를 조회하세요.
           - `totalCount`(전체 수집 대상 수)와 `caughtCount`(내가 잡은 수)로 도감 완성도를 함께 계산할 수 있어, 별도 조회 없이 진행도 바를 그릴 수 있습니다. → docs/ranking.md
@@ -235,15 +241,15 @@ public interface CollectionControllerSpec {
                                   {
                                     "id": 1,
                                     "name": "감성돔",
-                                    "imageUrl": "https://.../fish/1.png",
+                                    "imageUrl": "http://localhost:8080/images/fish/black_seabream_image.png",
                                     "rarity": "USUALLY",
                                     "habitat": "바다",
                                     "caught": true
                                   },
                                   {
-                                    "id": 2,
+                                    "id": 16,
                                     "name": "붕어",
-                                    "imageUrl": "https://.../fish/2.png",
+                                    "imageUrl": "http://localhost:8080/images/fish/crucian_carp_shadow.png",
                                     "rarity": "LOW",
                                     "habitat": "저수지",
                                     "caught": false
@@ -271,6 +277,182 @@ public interface CollectionControllerSpec {
                             """)))
   })
   BaseResponse<MyDexResponse> getMyDex(@Parameter(hidden = true) Long userId);
+
+  @Operation(
+      summary = "내 인증 기록 전체 조회",
+      security = @SecurityRequirement(name = "JWT"),
+      description =
+          """
+          ### 설명
+          - **로그인 사용자가 지금까지 남긴 인증 기록을 전부** 최신순으로 반환합니다. "어종명 (크기)"를 쭉 나열하는 화면용입니다.
+          - **기록 단위**입니다. 도감 그리드(`/dex`)나 어종 상세(`?fishId=`)가 *어종 단위*인 것과 다릅니다 —
+            감성돔을 3번 잡았다면 도감 그리드에는 칸 1개지만 이 목록에는 **줄 3개**가 뜹니다.
+          - **도감 인증 기록과 도감 외 수기 등록 기록이 함께** 옵니다. 사용자에게는 둘 다 "내가 남긴 기록"이기 때문이며,
+            각 줄의 `recordType`(`DEX` / `CUSTOM`)으로 구분합니다.
+
+          ### recordId 는 단독으로 기록을 특정하지 못합니다 (중요)
+          - 두 기록이 서로 다른 테이블에 저장되고 **양쪽 id 가 각각 1부터 증가**하므로 `recordId:42`가 두 줄에 있을 수 있습니다.
+          - 그래서 단건 조회는 **`recordId` + `recordType`을 한 쌍으로** 씁니다 →
+            `GET /api/collections/records/{recordId}?type={recordType}`. 응답의 두 필드를 그대로 옮기면 됩니다.
+          - 프론트에서 목록의 key 를 잡을 때도 `recordId` 단독이 아니라 `recordType + recordId` 조합을 쓰세요.
+
+          ### fishId 가 가리키는 대상
+          - `recordType:"DEX"` → **도감 어종 id**. `GET /api/fish/{id}`, `GET /api/collections?fishId=` 에 사용.
+          - `recordType:"CUSTOM"` → **도감 외 어종 id**. `GET /api/collections/custom?customFishId=` 에 사용.
+          - 한 줄에서 "이 어종의 다른 기록도 보기"로 넘어갈 때 씁니다.
+
+          ### 정렬 · 개수
+          - `recordedAt` **내림차순(최신순)** 고정입니다. 같은 시각이면 서버가 정한 규칙으로 동점을 깨며, **매번 같은 순서**가 보장됩니다.
+          - `recordedAt`은 촬영 시각이 아니라 **서버에 기록이 등록된 시각**입니다(EXIF를 읽지 않습니다).
+          - **개수를 자르지 않습니다.** 어종 상세가 사진을 4장으로 제한하는 것과 달리, 이 목록은 "전부 훑기"가 목적이라 전체를 내려줍니다.
+            (기록이 아주 많아져 페이징이 필요해지면 파라미터를 추가하는 형태로 확장합니다.)
+          - `totalCount` = `records` 길이 = `dexCount + customCount`.
+
+          ### 사용 방법
+          - `GET /api/collections/records` + 헤더 `Authorization: Bearer {accessToken}`
+          - 파라미터가 없습니다. 사용자 신원은 토큰에서 얻습니다.
+
+          ### ⚠ 예외상황
+          - `401`: 토큰이 없거나 무효한 경우.
+          - 기록이 하나도 없어도 **에러가 아닙니다** → `200` + `totalCount:0` + 빈 배열(`records:[]`).
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "조회 성공",
+        content =
+            @Content(
+                schema = @Schema(implementation = CatchHistoryResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "요청이 성공적으로 처리되었습니다.",
+                              "data": {
+                                "totalCount": 3,
+                                "dexCount": 2,
+                                "customCount": 1,
+                                "records": [
+                                  {
+                                    "recordId": 42,
+                                    "recordType": "DEX",
+                                    "fishId": 1,
+                                    "fishName": "감성돔",
+                                    "size": 31.0,
+                                    "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
+                                    "location": "격포항 방파제",
+                                    "recordedAt": "2026-09-06T18:20:04"
+                                  },
+                                  {
+                                    "recordId": 7,
+                                    "recordType": "CUSTOM",
+                                    "fishId": 3,
+                                    "fishName": "쏘가리",
+                                    "size": 41.0,
+                                    "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/custom-fish/uuid.jpg",
+                                    "location": "한탄강 고석정",
+                                    "recordedAt": "2026-09-05T14:32:10"
+                                  },
+                                  {
+                                    "recordId": 41,
+                                    "recordType": "DEX",
+                                    "fishId": 4,
+                                    "fishName": "참돔",
+                                    "size": 22.5,
+                                    "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
+                                    "location": null,
+                                    "recordedAt": "2026-09-01T09:11:47"
+                                  }
+                                ]
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "401",
+        description = "토큰 누락·무효",
+        content =
+            @Content(
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 401, "message": "인증이 필요합니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<CatchHistoryResponse> getMyCatchHistory(@Parameter(hidden = true) Long userId);
+
+  @Operation(
+      summary = "인증 기록 단건 조회",
+      security = @SecurityRequirement(name = "JWT"),
+      description =
+          """
+          ### 설명
+          - 인증 기록 **1건**의 상세를 반환합니다. 전체 목록(`GET /api/collections/records`)의 한 줄을 눌러 들어오는 화면용입니다.
+          - 도감 인증(`DEX`)과 도감 외 수기 등록(`CUSTOM`)이 **같은 응답 모양**으로 오므로 화면을 하나로 그릴 수 있습니다.
+          - 목록 항목에 `habitat`(어종 서식지) 하나가 더 있는 형태입니다. 기록이 아니라 **어종의 속성**이며,
+            `DEX`는 도감 시드 값, `CUSTOM`은 사용자가 등록할 때 적은 값입니다. 둘 다 비어 있을 수 있어 `null` 가능합니다.
+
+          ### 사용 방법 (type 필수)
+          - `GET /api/collections/records/{recordId}?type={recordType}` + 헤더 `Authorization: Bearer {accessToken}`
+            - 예: `GET /api/collections/records/42?type=DEX`
+          - `type`은 **필수**입니다. 두 기록 테이블의 id 가 겹치므로 `recordId` 하나로는 어느 기록인지 특정할 수 없습니다.
+          - 값은 **대문자 `DEX` / `CUSTOM`** 입니다(소문자는 `400`). 목록 응답의 `recordType`을 그대로 넣으세요.
+
+          ### ⚠ 예외상황
+          - `401`: 토큰이 없거나 무효한 경우.
+          - `400`: `type`이 누락되었거나 `DEX`·`CUSTOM` 이외의 값인 경우, `recordId`가 숫자가 아닌 경우.
+          - `C009(404)`: 다음 **세 경우를 모두 같은 404 로** 응답합니다 — 존재하지 않는 기록 / **다른 사용자의 기록** /
+            `type`이 실제 저장된 테이블과 어긋난 경우(예: `CUSTOM` 기록을 `type=DEX`로 조회).
+            셋을 구분해 알려주면 id 를 훑어 남이 무엇을 잡았는지 알아낼 수 있어 의도적으로 수렴시킵니다.
+          """)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "조회 성공",
+        content =
+            @Content(
+                schema = @Schema(implementation = CatchRecordDetailResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "code": 200,
+                              "message": "요청이 성공적으로 처리되었습니다.",
+                              "data": {
+                                "recordId": 42,
+                                "recordType": "DEX",
+                                "fishId": 1,
+                                "fishName": "감성돔",
+                                "habitat": "바다",
+                                "size": 31.0,
+                                "imageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/fish/uuid.jpg",
+                                "location": "격포항 방파제",
+                                "recordedAt": "2026-09-06T18:20:04"
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "404",
+        description = "기록이 없거나, 남의 기록이거나, type 이 어긋난 경우",
+        content =
+            @Content(
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            { "success": false, "code": 404, "message": "인증 기록을 찾을 수 없습니다.", "data": null }
+                            """)))
+  })
+  BaseResponse<CatchRecordDetailResponse> getMyCatchRecord(
+      @Parameter(hidden = true) Long userId,
+      @Parameter(description = "기록 ID(목록 응답의 recordId)", example = "42") Long recordId,
+      @Parameter(description = "기록 종류(목록 응답의 recordType) — DEX / CUSTOM", example = "DEX")
+          CatchRecordType type);
 
   @Operation(
       summary = "사진으로 어종 분류 (Top-3 후보)",
@@ -333,9 +515,9 @@ public interface CollectionControllerSpec {
                                 "uncertain": false,
                                 "guide": "후보 중에서 잡은 어종을 선택해주세요. 목록에 없으면 직접 선택할 수 있어요.",
                                 "candidates": [
-                                  { "rank": 1, "fishId": 15, "name": "붕어", "imageUrl": null, "confidence": 0.83 },
-                                  { "rank": 2, "fishId": 16, "name": "잉어", "imageUrl": null, "confidence": 0.05 },
-                                  { "rank": 3, "fishId": 20, "name": "가물치", "imageUrl": null, "confidence": 0.01 }
+                                  { "rank": 1, "fishId": 16, "name": "붕어", "imageUrl": "http://localhost:8080/images/fish/crucian_carp_image.png", "confidence": 0.83 },
+                                  { "rank": 2, "fishId": 17, "name": "잉어", "imageUrl": "http://localhost:8080/images/fish/carp_image.png", "confidence": 0.05 },
+                                  { "rank": 3, "fishId": 21, "name": "가물치", "imageUrl": "http://localhost:8080/images/fish/snakehead_image.png", "confidence": 0.01 }
                                 ]
                               }
                             }
@@ -493,7 +675,9 @@ public interface CollectionControllerSpec {
           - `caught` 없음 — 도감은 24칸 중 안 잡은 칸을 그림자로 그리지만, 이 목록은 **등록해야 생기는 칸**이라 전부 잡은 것입니다.
           - `rarity` 없음 — 희귀도는 도감 마스터 데이터의 속성이라 사용자가 만든 어종에는 없습니다.
           - `catchCount`·`maxSize` **있음** — 도감 그리드는 이 둘을 일부러 뺐지만, 이 목록은 칸에 바로 표시합니다.
-          - `imageUrl`은 고정 도감 이미지가 아니라 **가장 최근에 등록한 사진**입니다(새 사진을 올리면 칸이 갱신됩니다).
+          - `imageUrl`은 어종·기록과 무관하게 **항상 같은 기본 이미지**(`{서버}/images/fish/basic_image.png`)입니다.
+            사용자가 만든 어종에는 공식 도감 이미지가 없고, 도감 그리드와 나란히 놓이는 화면이라 통일된 아이콘을 씁니다.
+            **본인이 찍은 사진**은 칸을 눌러 상세(`GET /api/collections/custom?customFishId=`)에서 봅니다.
           - 수 두 개의 의미가 다릅니다 → `totalCount`는 **내가 만든 어종 수**(= `fishes` 길이), `totalCatchCount`는
             **등록한 기록의 총 수**입니다. 도감처럼 "전체 몇 종"이라는 분모가 없어 완성도(%)를 계산하지 않습니다.
 
@@ -536,7 +720,7 @@ public interface CollectionControllerSpec {
                                 {
                                   "id": 3,
                                   "name": "쏘가리",
-                                  "imageUrl": "https://.../custom-fish/uuid1.jpg",
+                                  "imageUrl": "http://localhost:8080/images/fish/basic_image.png",
                                   "habitat": "강",
                                   "catchCount": 3,
                                   "maxSize": 41.0
@@ -544,7 +728,7 @@ public interface CollectionControllerSpec {
                                 {
                                   "id": 1,
                                   "name": "미꾸라지",
-                                  "imageUrl": "https://.../custom-fish/uuid3.jpg",
+                                  "imageUrl": "http://localhost:8080/images/fish/basic_image.png",
                                   "habitat": null,
                                   "catchCount": 1,
                                   "maxSize": 12.5

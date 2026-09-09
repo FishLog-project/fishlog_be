@@ -1,5 +1,7 @@
 package com.fishlog.fishlog_be.domain.collection.controller;
 
+import com.fishlog.fishlog_be.domain.collection.dto.CatchHistoryResponse;
+import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordDetailResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CatchRecordResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.ClassifyResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchDetailResponse;
@@ -7,6 +9,7 @@ import com.fishlog.fishlog_be.domain.collection.dto.CustomCatchResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyCustomDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.MyDexResponse;
 import com.fishlog.fishlog_be.domain.collection.dto.VerifyResponse;
+import com.fishlog.fishlog_be.domain.collection.entity.CatchRecordType;
 import com.fishlog.fishlog_be.domain.collection.service.CollectionService;
 import com.fishlog.fishlog_be.domain.collection.service.CustomCatchService;
 import com.fishlog.fishlog_be.global.response.BaseResponse;
@@ -14,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -41,6 +45,24 @@ public class CollectionController implements CollectionControllerSpec {
   @GetMapping("/dex")
   public BaseResponse<MyDexResponse> getMyDex(@AuthenticationPrincipal Long userId) {
     return BaseResponse.success(collectionService.getMyDex(userId));
+  }
+
+  // 기록 단위 전체 목록. 어종 단위인 /dex 와 달리 파라미터가 없다(신원은 토큰, 개수 제한 없음).
+  @Override
+  @GetMapping("/records")
+  public BaseResponse<CatchHistoryResponse> getMyCatchHistory(
+      @AuthenticationPrincipal Long userId) {
+    return BaseResponse.success(collectionService.getMyCatchHistory(userId));
+  }
+
+  // 단건. recordId 만으로는 두 테이블 중 어디인지 알 수 없어 type 을 함께 받는다(둘이 한 쌍의 식별자).
+  @Override
+  @GetMapping("/records/{recordId}")
+  public BaseResponse<CatchRecordDetailResponse> getMyCatchRecord(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long recordId,
+      @RequestParam CatchRecordType type) {
+    return BaseResponse.success(collectionService.getMyCatchRecord(userId, recordId, type));
   }
 
   // 분류는 저장을 하지 않으므로 사용자 신원이 필요 없다(보호 엔드포인트인 것은 모델 서버를 아무나 못 쓰게 하기 위함).
