@@ -19,16 +19,17 @@ import java.util.List;
  *       몇 번 잡았는지"를 칸에 바로 보여 주는 것이 요구사항이다.
  * </ul>
  *
- * <p>{@code imageUrl}은 도감처럼 고정 이미지가 없어 <b>가장 최근에 등록한 사진</b>을 쓴다 — 사용자가 만든 어종의 대표 이미지로 그만한 후보가 없고, 새
- * 사진을 올리면 칸이 자연스럽게 갱신된다.
+ * <p>{@code imageUrl}은 어종·기록과 무관하게 <b>항상 같은 기본 이미지</b>({@code basic_image})다. 사용자가 만든 어종에는 도감 같은 공식
+ * 이미지가 없고, 그리드는 도감 그리드와 나란히 놓이는 화면이라 칸마다 제각각인 실사 사진보다 통일된 아이콘이 낫다는 판단이다. 사용자가 <b>자기가 찍은 사진</b>을 보고
+ * 싶으면 칸을 눌러 상세({@code GET /api/collections/custom?customFishId=})로 들어간다. → docs/media.md
  */
 @Schema(title = "CustomDexEntryResponse DTO", description = "내 도감 외 어종 항목(어종 + 잡은 횟수·최대 크기)")
 public record CustomDexEntryResponse(
     @Schema(description = "도감 외 어종 ID(상세 조회 시 customFishId 로 사용)", example = "3") Long id,
     @Schema(description = "사용자가 수기 입력한 어종명", example = "쏘가리") String name,
     @Schema(
-            description = "대표 이미지 URL — 가장 최근에 등록한 사진",
-            example = "https://.../custom-fish/uuid1.jpg")
+            description = "대표 이미지 URL — 도감 외 어종 공통 기본 이미지(파일 없으면 null)",
+            example = "http://localhost:8080/images/fish/basic_image.png")
         String imageUrl,
     @Schema(
             description = "주요 서식지(수기 입력, 미입력이면 null)",
@@ -42,18 +43,16 @@ public record CustomDexEntryResponse(
    * 한 어종의 기록들로부터 그리드 한 칸을 만든다.
    *
    * @param fish 그룹 기준이 된 사용자별 어종(이름·서식지의 출처)
-   * @param records 그 어종의 기록 전체. <b>최신순으로 정렬돼 있어야 한다</b> — 대표 이미지로 맨 앞(=가장 최근) 사진을 쓴다
+   * @param records 그 어종의 기록 전체(횟수·최대 크기의 출처). 순서는 상관없다 — 대표 이미지로 사진을 쓰지 않기 때문이다.
+   * @param basicImageUrl 도감 외 어종 공통 기본 이미지 URL({@link
+   *     com.fishlog.fishlog_be.global.image.FishImageService#getBasicImageUrl()})
    */
-  public static CustomDexEntryResponse of(CustomFish fish, List<CustomCatchRecord> records) {
+  public static CustomDexEntryResponse of(
+      CustomFish fish, List<CustomCatchRecord> records, String basicImageUrl) {
     // 최대 크기는 전체 기록에서 구한다. size 는 NOT NULL 이고 어종 행은 기록이 있어야 생기므로 항상 값이 있다.
     Double maxSize =
         records.stream().map(CustomCatchRecord::getSize).max(Double::compare).orElse(null);
     return new CustomDexEntryResponse(
-        fish.getId(),
-        fish.getName(),
-        records.getFirst().getCertifiedImageUrl(),
-        fish.getHabitat(),
-        records.size(),
-        maxSize);
+        fish.getId(), fish.getName(), basicImageUrl, fish.getHabitat(), records.size(), maxSize);
   }
 }

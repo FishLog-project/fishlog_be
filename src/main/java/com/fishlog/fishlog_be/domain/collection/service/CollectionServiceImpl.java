@@ -23,6 +23,7 @@ import com.fishlog.fishlog_be.global.ai.FishClassifyClient;
 import com.fishlog.fishlog_be.global.ai.dto.PredictResponse;
 import com.fishlog.fishlog_be.global.ai.dto.PredictionItem;
 import com.fishlog.fishlog_be.global.exception.CustomException;
+import com.fishlog.fishlog_be.global.image.FishImageService;
 import com.fishlog.fishlog_be.global.s3.PathName;
 import com.fishlog.fishlog_be.global.s3.S3Service;
 import java.util.ArrayList;
@@ -48,6 +49,8 @@ public class CollectionServiceImpl implements CollectionService {
   private final FishService fishService;
   private final FishClassifyClient fishClassifyClient;
   private final S3Service s3Service;
+  // 못 잡은 칸에 쓸 그림자 이미지 URL 을 만든다(잡은 칸의 어종 이미지는 fish 서비스가 이미 채워 준다).
+  private final FishImageService fishImageService;
   // 탈퇴 정리를 collection 도메인 안에서 마무리하기 위한 위임 대상(같은 도메인의 형제 서비스).
   private final CustomCatchService customCatchService;
 
@@ -73,9 +76,18 @@ public class CollectionServiceImpl implements CollectionService {
     List<FishSummaryResponse> dex = fishService.getFishList(null).fishes();
     // 2) 내가 잡은 어종 id 집합(중복 제거) → 칸마다 O(1) 판정용.
     Set<Long> caughtIds = new HashSet<>(catchRecordRepository.findDistinctCaughtFishIds(userId));
-    // 3) 두 결과를 병합해 각 칸에 caught 를 덧입힌다(N+1 없이 메모리 조합).
+    // 3) 두 결과를 병합해 각 칸에 caught 와 "그 칸에 그릴 이미지"를 덧입힌다(N+1 없이 메모리 조합).
+    //    못 잡은 칸은 어종 이미지 대신 그림자 이미지를 내려 준다 — 실제 어종 이미지 URL 은 응답에 싣지 않는다(스포일러 방지).
     List<DexEntryResponse> entries =
-        dex.stream().map(fish -> DexEntryResponse.of(fish, caughtIds.contains(fish.id()))).toList();
+        dex.stream()
+            .map(
+                fish -> {
+                  boolean caught = caughtIds.contains(fish.id());
+                  String imageUrl =
+                      caught ? fish.imageUrl() : fishImageService.getShadowImageUrl(fish.name());
+                  return DexEntryResponse.of(fish, caught, imageUrl);
+                })
+            .toList();
     return MyDexResponse.of(entries);
   }
 
