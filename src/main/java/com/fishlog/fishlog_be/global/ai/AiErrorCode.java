@@ -19,7 +19,7 @@ public enum AiErrorCode implements BaseErrorCode {
   IMAGE_DECODE_FAILED("AI003", "사진을 읽을 수 없습니다. 다른 사진으로 다시 시도해주세요.", HttpStatus.BAD_REQUEST),
   UNSUPPORTED_FORMAT(
       "AI004", "지원하지 않는 이미지 형식입니다. JPG 또는 PNG로 올려주세요.", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
-  FILE_TOO_LARGE("AI005", "사진 크기는 5MB 이하여야 합니다.", HttpStatus.PAYLOAD_TOO_LARGE),
+  FILE_TOO_LARGE("AI005", "사진 크기는 10MB 이하여야 합니다.", HttpStatus.PAYLOAD_TOO_LARGE),
   IMAGE_TOO_LARGE("AI006", "사진 해상도가 너무 큽니다. 더 작은 사진으로 시도해주세요.", HttpStatus.PAYLOAD_TOO_LARGE),
   MODEL_NOT_LOADED("AI007", "어종 분류 서버가 준비 중입니다. 잠시 후 다시 시도해주세요.", HttpStatus.SERVICE_UNAVAILABLE),
   CLASSIFY_UNAVAILABLE(

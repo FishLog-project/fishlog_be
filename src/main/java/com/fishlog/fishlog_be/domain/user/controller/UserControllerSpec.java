@@ -206,12 +206,12 @@ public interface UserControllerSpec {
 
           ### 요청 형식 (multipart/form-data)
           - `image` 파트에 이미지 파일을 담아 전송합니다.
-          - 이미지 파일만 허용, 최대 5MB.
+          - 이미지 파일만 허용, 최대 10MB.
 
           ### ⚠ 예외상황
           - `401`: 인증 토큰 없음/무효
           - `USER_NOT_FOUND(404)`: 토큰의 사용자가 존재하지 않음
-          - `EMPTY_FILE(400)`: 파일 없음 / `INVALID_FILE_TYPE(400)`: 이미지 아님 / `FILE_SIZE_EXCEEDED(400)`: 5MB 초과
+          - `EMPTY_FILE(400)`: 파일 없음 / `INVALID_FILE_TYPE(400)`: 이미지 아님 / `FILE_SIZE_EXCEEDED(400)`: 10MB 초과
           - `UPLOAD_FAILED(500)`: S3 업로드 실패
           """)
   @ApiResponses({

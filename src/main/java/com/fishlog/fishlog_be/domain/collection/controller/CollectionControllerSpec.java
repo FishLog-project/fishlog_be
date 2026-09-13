@@ -512,14 +512,14 @@ public interface CollectionControllerSpec {
           - 모델 서버 장애(503)에도 인증 자체는 가능합니다. `verify`는 모델을 호출하지 않습니다.
 
           ### 제약조건
-          - 이미지 파일만, 최대 5MB (분류 한도 = 저장 한도. 분류에 성공한 사진은 반드시 인증도 가능합니다)
+          - 이미지 파일만, 최대 10MB (분류 한도 = 저장 한도. 분류에 성공한 사진은 반드시 인증도 가능합니다)
 
           ### ⚠ 예외상황
           - `AI001(400)`: 사진이 비어 있음
           - `AI002(400)`: 이미지 파일이 아님
           - `AI003(400)`: 사진을 디코딩할 수 없음(손상 등)
           - `AI004(415)`: 지원하지 않는 이미지 형식
-          - `AI005(413)`: 5MB 초과
+          - `AI005(413)`: 10MB 초과
           - `AI006(413)`: 해상도가 지나치게 큼
           - `AI007(503)`: 모델 미로드(서버 기동 중)
           - `AI008(503)`: 모델 서버 연결 불가 → 직접 선택 유도
@@ -572,7 +572,7 @@ public interface CollectionControllerSpec {
                     @ExampleObject(
                         value =
                             """
-                            { "success": false, "code": 413, "message": "사진 크기는 5MB 이하여야 합니다.", "data": null }
+                            { "success": false, "code": 413, "message": "사진 크기는 10MB 이하여야 합니다.", "data": null }
                             """))),
     @ApiResponse(
         responseCode = "503",
@@ -587,7 +587,7 @@ public interface CollectionControllerSpec {
                             """)))
   })
   BaseResponse<ClassifyResponse> classify(
-      @Parameter(description = "인증 사진(이미지, 최대 5MB)") MultipartFile image);
+      @Parameter(description = "인증 사진(이미지, 최대 10MB)") MultipartFile image);
 
   @Operation(
       summary = "어종 인증 (도감 기록)",
@@ -618,7 +618,7 @@ public interface CollectionControllerSpec {
           - 최대 100자입니다.
 
           ### 제약조건
-          - 이미지 파일만, 최대 5MB
+          - 이미지 파일만, 최대 10MB
           - `size`는 필수이며 0 초과 300 이하(cm). 크기 랭킹(`GET /api/rankings/size`) 기준값이라 NOT NULL 입니다.
           - `location`은 선택이며 최대 100자입니다.
           - 사용자 신원은 토큰에서 얻습니다(userId 파라미터 없음).
@@ -628,7 +628,7 @@ public interface CollectionControllerSpec {
           - `C002(400)`: 크기가 현실 범위(300cm) 초과
           - `C003(400)`: 잡은 위치가 100자를 초과
           - `F001(404)`: 해당 어종이 도감에 없음
-          - `S001(400)`·`S002(400)`·`S003(400)`: 사진 없음·이미지 아님·5MB 초과
+          - `S001(400)`·`S002(400)`·`S003(400)`: 사진 없음·이미지 아님·10MB 초과
           - `S004(500)`: S3 업로드 실패
           - `401`: 토큰 누락·무효
           """)
@@ -688,7 +688,7 @@ public interface CollectionControllerSpec {
       @Parameter(description = "잡은 크기(cm)", example = "27.5") Double size,
       @Parameter(description = "잡은 위치(수기 입력, 선택, 최대 100자)", example = "충주호 종댕이길 선착장")
           String location,
-      @Parameter(description = "인증 사진(이미지, 최대 5MB)") MultipartFile image);
+      @Parameter(description = "인증 사진(이미지, 최대 10MB)") MultipartFile image);
 
   @Operation(
       summary = "내 도감 외 어종 전체 조회(그리드)",
@@ -935,7 +935,7 @@ public interface CollectionControllerSpec {
           - `C005(400)`: 어종명이 30자를 초과
           - `C006(400)`: 이미 도감에 있는 어종명 → 도감 인증(`/verify`)을 사용
           - `C007(400)`: 주요 서식지가 20자를 초과
-          - `S001(400)`·`S002(400)`·`S003(400)`: 사진 없음·이미지 아님·5MB 초과
+          - `S001(400)`·`S002(400)`·`S003(400)`: 사진 없음·이미지 아님·10MB 초과
           - `S004(500)`: S3 업로드 실패
           - `401`: 토큰 누락·무효
           """)
@@ -991,5 +991,5 @@ public interface CollectionControllerSpec {
       @Parameter(description = "주요 서식지(수기 입력, 선택, 최대 20자)", example = "강") String habitat,
       @Parameter(description = "잡은 크기(cm)", example = "34.0") Double size,
       @Parameter(description = "잡은 위치(수기 입력, 선택, 최대 100자)", example = "한탄강 고석정") String location,
-      @Parameter(description = "사진(이미지, 최대 5MB)") MultipartFile image);
+      @Parameter(description = "사진(이미지, 최대 10MB)") MultipartFile image);
 }
