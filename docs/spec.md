@@ -192,11 +192,11 @@
 `multipart/form-data`로 `image` 파트에 이미지 파일을 담아 전송. S3(`profile/` 경로)에 업로드하고 URL을 `users.profile_image_url`에 저장한다. 기존 이미지가 있으면 삭제(best-effort). → `docs/media.md`
 ```jsonc
 // Request: multipart/form-data
-//   image=<이미지 파일>   (이미지만, 최대 5MB)
+//   image=<이미지 파일>   (이미지만, 최대 10MB)
 // Response(data)
 { "profileImageUrl": "https://fishlog-bucket.s3.ap-northeast-2.amazonaws.com/profile/uuid.png" }
 ```
-- 파일 검증(`global/s3` 에서 수행): 파일 없음 `EMPTY_FILE(400)`, 이미지 아님 `INVALID_FILE_TYPE(400)`, 5MB 초과 `FILE_SIZE_EXCEEDED(400)`, 업로드 실패 `UPLOAD_FAILED(500)`.
+- 파일 검증(`global/s3` 에서 수행): 파일 없음 `EMPTY_FILE(400)`, 이미지 아님 `INVALID_FILE_TYPE(400)`, 10MB 초과 `FILE_SIZE_EXCEEDED(400)`, 업로드 실패 `UPLOAD_FAILED(500)`.
 - 사용자 미존재 `404 USER_NOT_FOUND`, 미인증 `401`.
 
 ### 낚시 스팟 (`/api/spots`) ✅
@@ -715,7 +715,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ```jsonc
 // Request: multipart/form-data
-//   image: (이미지 파일, 최대 5MB)
+//   image: (이미지 파일, 최대 10MB)
 
 // Response(data)
 {
@@ -741,7 +741,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ```jsonc
 // Request: multipart/form-data
-//   image:    (이미지 파일, 최대 5MB)
+//   image:    (이미지 파일, 최대 10MB)
 //   fishId:   15
 //   size:     27.5
 //   location: "충주호 종댕이길 선착장"   // 선택 — 잡은 위치 수기 입력
@@ -768,7 +768,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 - **업로드 후 DB 저장이 실패하면 S3 객체를 보상 삭제**한다(고아 객체 방지). 저장은 `saveAndFlush`로 제약 위반을 커밋 전에 드러낸다.
 - 오류: 크기 이상 `C001·C002(400)`, 위치 길이 초과 `C003(400)`, 어종 미존재 `F001(404)`, 사진 문제 `S001~S003(400)`, 업로드 실패 `S004(500)`, 용량 초과 `413`.
 
-> **이미지 크기 한도는 5MB 한 곳에서 관리된다 ✅.** `S3Service.MAX_IMAGE_SIZE`를 분류 경로도 함께 쓰므로 "분류는 성공했는데 저장이 실패"하는 흐름이 없다. 컨테이너 한도(`spring.servlet.multipart.max-file-size=10MB`)는 그보다 느슨하게 둬서, 초과분이 500이 아니라 **413 + 명확한 메시지**로 나가게 한다.
+> **이미지 크기 한도는 10MB 한 곳에서 관리된다 ✅.** `S3Service.MAX_IMAGE_SIZE`를 분류 경로도 함께 쓰므로 "분류는 성공했는데 저장이 실패"하는 흐름이 없다. 컨테이너 한도(`spring.servlet.multipart.max-file-size=10MB`)도 같은 값이라 초과분은 500이 아니라 **413 + 명확한 메시지**로 나간다. ⚠️ 실제 상한은 앞단 리버스 프록시(nginx `client_max_body_size`, 미설정 시 기본 1MB)가 결정하므로 배포 환경에서 함께 확인해야 한다 → `docs/media.md` "크기 한도".
 
 ### `POST /api/collections/custom` — 도감 외 어종 수기 등록 ✅ (보호)
 
@@ -776,7 +776,7 @@ data/spot/spot_master.json          # 확정 원본 (99행: 담수 50 + 바다 4
 
 ```jsonc
 // Request: multipart/form-data
-//   image:    (이미지 파일, 최대 5MB)
+//   image:    (이미지 파일, 최대 10MB)
 //   fishName: "쏘가리"          // 필수 — 어종명 수기 입력
 //   habitat:  "강"              // 선택 — 주요 서식지 수기 입력
 //   size:     34.0             // 필수 — cm

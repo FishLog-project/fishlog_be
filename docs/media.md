@@ -87,7 +87,7 @@
 
 ### 구현 현황 ✅
 - **공통 S3 계층 `global/s3`**: `S3Service`(+`Impl`, AWS SDK v2 `S3Client`), `PathName`(경로 prefix enum: `PROFILE`·`FISH`·`CUSTOM_FISH`), `S3ErrorCode`(S001~S004).
-  - `upload(MultipartFile, PathName)` — 검증(이미지만·최대 5MB) 후 `{prefix}/{uuid}{ext}`로 업로드, 접근 URL 반환.
+  - `upload(MultipartFile, PathName)` — 검증(이미지만·최대 10MB) 후 `{prefix}/{uuid}{ext}`로 업로드, 접근 URL 반환.
   - `delete(url)` — URL에서 key를 파싱해 객체 삭제.
 - **`S3Config`**(`global/config`): `spring.cloud.aws.*` 값으로 `S3Client` 빈 직접 구성(리전·정적 자격증명).
 - **적용:**
@@ -99,10 +99,16 @@
 
 ## 크기 한도 — 한 곳에서 관리 ✅
 
-- `S3Service.MAX_IMAGE_SIZE`(**5MB**)가 단일 출처다. 저장(S3)뿐 아니라 **어종 분류(AI) 경로도 같은 상수를 검증에 쓴다.**
-  - 이유: 분류 한도(모델 계약 10MB)가 저장 한도보다 느슨하면 "분류는 성공했는데 인증 저장이 실패"하는 흐름이 생긴다. 한도를 묶어 **분류에 성공한 사진은 반드시 저장도 가능**하게 맞췄다.
-- 컨테이너 한도 `spring.servlet.multipart.max-file-size=10MB`는 일부러 더 느슨하다. 그래야 초과분이 컨테이너에서 잘려 500이 되지 않고, `MaxUploadSizeExceededException` 핸들러가 **413 + 명확한 메시지**로 변환한다.
-  - ⚠️ 이 설정 이전에는 Spring Boot 기본값(`1MB`)이 적용돼, 1~5MB 사진은 `S3Service` 검증에 닿기도 전에 잘리고 500으로 나갔다.
+- `S3Service.MAX_IMAGE_SIZE`(**10MB**)가 단일 출처다. 저장(S3)뿐 아니라 **어종 분류(AI) 경로도 같은 상수를 검증에 쓴다.**
+  - 이유: 분류 한도가 저장 한도보다 느슨하면 "분류는 성공했는데 인증 저장이 실패"하는 흐름이 생긴다. 한도를 묶어 **분류에 성공한 사진은 반드시 저장도 가능**하게 맞췄다. 값은 모델 서버 계약 상한(10MB)에 맞춘다.
+- 컨테이너 한도 `spring.servlet.multipart.max-file-size=10MB`는 앱 한도와 같은 값이다. 초과분이 컨테이너에서 잘려 500이 되지 않도록 `MaxUploadSizeExceededException` 핸들러가 **413 + 명확한 메시지**로 변환한다.
+- ⚠️ **한도는 리버스 프록시까지 3층이고, 가장 바깥이 가장 작으면 안쪽 검증은 영원히 실행되지 않는다.**
+  1. nginx `client_max_body_size` (EC2, 이 저장소 밖) — **미설정 시 기본 1MB**
+  2. Tomcat `spring.servlet.multipart.max-file-size` = 10MB
+  3. 앱 `S3Service.MAX_IMAGE_SIZE` = 10MB
+  - 실제 사고: 1번이 기본 1MB여서 폰 카메라 사진(2~5MB)이 전부 프록시에서 413으로 잘렸다. Spring까지 닿지 않아 **앱 로그에 한 줄도 남지 않았고**, 응답 본문도 `BaseResponse` JSON이 아니라 nginx HTML이라 프론트가 "분석 실패"로 뭉뚱그려 표시했다. → 운영 nginx에 `client_max_body_size 12M` 필요(multipart 경계·파트 헤더 오버헤드 여유).
+  - 진단법: `CollectionServiceImpl.classify` 진입 로그(`어종 분류 요청 수신: ... size=Nbytes`)가 찍히면 앱까지 도달한 것, 안 찍히면 프록시에서 잘린 것이다. 거부 시에는 `FishClassifyClientImpl`이 사유·실제 바이트·한도를 함께 남긴다.
+  - 이전 이력: Tomcat 설정 이전 Spring Boot 기본값(`1MB`) 시절에는 1~5MB 사진이 `S3Service` 검증에 닿기도 전에 잘려 500으로 나갔다.
 
 ## 저장소
 - **AWS S3** (배포 환경이 EC2라 AWS 생태계와 정합). **SDK v2 사용**(`software.amazon.awssdk:s3`).
@@ -121,6 +127,6 @@
 
 ## 확정 필요 항목
 - [ ] 업로드 방식(Presigned vs 서버 경유)
-- [x] 용량 제약 — `S3Service.MAX_IMAGE_SIZE` 5MB 단일 출처 ✅ / [ ] 포맷·해상도 제약, 썸네일 생성 여부 📋
+- [x] 용량 제약 — `S3Service.MAX_IMAGE_SIZE` 10MB 단일 출처 ✅ / [ ] 포맷·해상도 제약, 썸네일 생성 여부 📋
 - [ ] S3 객체 키 규칙 / 접근 제어(공개 vs presigned GET)
 - [x] 인증 사진 ↔ 어종 판별/승인 방식 — AI 후보 제시 + 사용자 확정 ✅
