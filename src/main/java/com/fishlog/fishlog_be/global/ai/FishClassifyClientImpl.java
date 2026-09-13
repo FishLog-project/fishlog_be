@@ -121,16 +121,30 @@ public class FishClassifyClientImpl implements FishClassifyClient {
   /** 모델에 보내기 전 걸러낼 수 있는 것은 미리 거른다(빈 파일·비이미지·용량). 리사이즈가 아니라 거부다. */
   private void validate(MultipartFile image) {
     if (image == null || image.isEmpty()) {
+      logReject("EMPTY_FILE", image);
       throw new CustomException(AiErrorCode.EMPTY_FILE);
     }
     // S3 저장 한도와 같은 값을 쓴다 → 분류에 성공한 사진은 반드시 인증(저장)도 가능하다.
     if (image.getSize() > S3Service.MAX_IMAGE_SIZE) {
+      logReject("FILE_TOO_LARGE", image);
       throw new CustomException(AiErrorCode.FILE_TOO_LARGE);
     }
     String contentType = image.getContentType();
     if (contentType == null || !contentType.startsWith("image/")) {
+      logReject("INVALID_FILE_TYPE", image);
       throw new CustomException(AiErrorCode.INVALID_FILE_TYPE);
     }
+  }
+
+  /** 검증에서 거부한 업로드를 기록한다 — 프론트가 받은 4xx의 실제 원인을 서버 로그에서 되짚기 위한 최소 정보. */
+  private void logReject(String reason, MultipartFile image) {
+    log.warn(
+        "어종 분류 업로드 거부: reason={}, filename={}, contentType={}, size={}bytes (한도 {}bytes)",
+        reason,
+        image == null ? null : image.getOriginalFilename(),
+        image == null ? null : image.getContentType(),
+        image == null ? -1 : image.getSize(),
+        S3Service.MAX_IMAGE_SIZE);
   }
 
   private byte[] readBytes(MultipartFile image) {
