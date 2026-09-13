@@ -68,7 +68,7 @@ public class GlobalExceptionHandler {
       MaxUploadSizeExceededException ex) {
     log.warn("업로드 용량 초과: {}", ex.getMessage());
     return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-        .body(BaseResponse.error(413, "사진 크기는 5MB 이하여야 합니다."));
+        .body(BaseResponse.error(413, "사진 크기는 10MB 이하여야 합니다."));
   }
 
   @ExceptionHandler(TooManyRequestsException.class)

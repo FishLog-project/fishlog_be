@@ -138,6 +138,14 @@ public class CollectionServiceImpl implements CollectionService {
 
   @Override
   public ClassifyResponse classify(MultipartFile image) {
+    // 업로드가 앱까지 도달했는지, 도달했다면 실제 몇 바이트였는지를 남긴다.
+    // 앞단 프록시(client_max_body_size)에서 잘렸다면 이 줄 자체가 찍히지 않으므로,
+    // "프록시에서 끊겼나 / 앱 검증에서 막혔나"를 로그만으로 가를 수 있다.
+    log.info(
+        "어종 분류 요청 수신: filename={}, contentType={}, size={}bytes",
+        image == null ? null : image.getOriginalFilename(),
+        image == null ? null : image.getContentType(),
+        image == null ? -1 : image.getSize());
     // 모델 서버에 닿지 못한 경우만 empty 다(사진 자체가 문제면 클라이언트가 이미 AiErrorCode 4xx 로 예외를 던진다).
     // 여기서 503 으로 끊어 클라이언트가 "목록에서 직접 선택" 대안 경로로 넘어가게 한다.
     PredictResponse prediction =
