@@ -16,7 +16,11 @@ public class EmailSender {
 
   private final JavaMailSender mailSender;
 
-  @Value("${spring.mail.username}")
+  /**
+   * 메일 발신 주소(From). SMTP 로그인 계정과 분리한다 — SES는 로그인 계정(SMTP username)과 발신 주소가 다르기 때문. 값이 없으면 SMTP
+   * username 으로 폴백한다(Gmail 등 계정=발신주소인 경우 호환). → docs/security.md
+   */
+  @Value("${mail.from-address:${spring.mail.username}}")
   private String from;
 
   @Async
