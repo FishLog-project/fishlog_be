@@ -50,9 +50,7 @@ public class CongestionClientImpl implements CongestionClient {
 
   public CongestionClientImpl(
       RestClient tourApiRestClient,
-      @Value(
-              "${external.tour.congestion-base-url:https://apis.data.go.kr/B551011/TatsCnctrRateService/tatsCnctrRatedList}")
-          String baseUrl,
+      @Value("${external.tour.congestion-base-url}") String baseUrl,
       @Value("${external.tour.service-key}") String serviceKey,
       @Value("${external.tour.mobile-app:fishlog}") String mobileApp) {
     this.restClient = tourApiRestClient;

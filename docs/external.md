@@ -208,7 +208,7 @@ curl -s -F "file=@fish.jpg" http://${MODEL_EC2_HOST}/predict
   - 문서 페이지: https://www.data.go.kr/data/15128555/openapi.do
   - **실제 호출 엔드포인트:** `https://apis.data.go.kr/B551011/TatsCnctrRateService/tatsCnctrRatedList`
 - **인증키:** §2 TourAPI와 **동일 키를 재사용**한다(`external.tour.service-key`). 별도 활용신청 없이 `resultCode: 0000`이 떨어지는 것을 실호출로 확인했다.
-- **base-url 프로퍼티:** `external.tour.congestion-base-url` (미설정 시 위 엔드포인트가 기본값이라 `be_config` 수정 없이 동작한다).
+- **base-url 프로퍼티:** `external.tour.congestion-base-url` — `be_config` 서브모듈의 `application-local.properties`·`application-prod.properties`에 정의한다(§2 `external.tour.base-url`과 동일 형식). **기본값 없이 필수**이며, 누락되면 기동 시점에 실패한다 — 엔드포인트가 코드와 설정 두 군데로 갈라지지 않게 하기 위해서다.
 
 #### 조인 키 — TourAPI 응답에 이미 들어 있다 (핵심)
 
