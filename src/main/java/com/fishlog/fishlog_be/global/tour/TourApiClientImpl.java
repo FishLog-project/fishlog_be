@@ -162,7 +162,9 @@ public class TourApiClientImpl implements TourApiClient {
         emptyToNull(n.path("addr1").asText("")),
         emptyToNull(n.path("addr2").asText("")),
         toDouble(n.path("mapx").asText("")),
-        toDouble(n.path("mapy").asText("")));
+        toDouble(n.path("mapy").asText("")),
+        emptyToNull(n.path("lDongRegnCd").asText("")),
+        emptyToNull(n.path("lDongSignguCd").asText("")));
   }
 
   private boolean isSuccess(String resultCode) {

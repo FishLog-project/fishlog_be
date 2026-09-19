@@ -59,9 +59,10 @@ com.fishlog.fishlog_be
 │  │  └─ dto/RecommendedSpotsResponse  # marine·inland 각 PopularSpotResponse
 │  └─ tour                       # 주변 관광 장소(전용 테이블 없음 — TourAPI 실시간 프록시)
 │     ├─ controller/TourController.java (+Spec)  # GET /api/tours/nearby (공개)
-│     ├─ service/TourService.java · TourServiceImpl.java  # type→contentTypeId, radius/page 보정 후 global/tour 호출
-│     ├─ entity/TourCategory.java  # 관광지12·숙박32·음식점39 (enum, @Entity 아님)
-│     └─ dto/NearbyTourResponse · TourSpotResponse
+│     ├─ service/TourService.java · TourServiceImpl.java  # type→contentTypeId, radius/page 보정 후 global/tour 호출 + 관광지에 당일 혼잡도 결합
+│     ├─ policy/CongestionMatcher.java  # TourAPI title ↔ 집중률 tAtsNm 이름 매칭 규칙(이 연동의 유일한 실패 지점)
+│     ├─ entity/TourCategory.java · CongestionLevel.java  # 관광지12·숙박32·음식점39 / 혼잡도 등급 여유·보통·혼잡 (enum, @Entity 아님)
+│     └─ dto/NearbyTourResponse · TourSpotResponse · CongestionResponse
 └─ global
    ├─ common/BaseTimeEntity.java              # createdAt/modifiedAt 감사(auditing) 공통 상위 엔티티
    ├─ response/BaseResponse.java              # 공통 응답 래퍼 <T>
@@ -73,6 +74,7 @@ com.fishlog.fishlog_be
    ├─ s3                                       # S3 업로드(AWS SDK v2) — S3Service(+Impl)·PathName(profile/·fish/·custom-fish/)·S3ErrorCode → docs/media.md
    ├─ forecast                                # 바다낚시지수 예보 외부연동 — FishingIndexClient(+Impl)·ForecastService(+Impl)·dto/SpotForecast (Redis 12h 캐시)
    ├─ tour                                     # 관광 정보(TourAPI KorService2) 외부연동 — TourApiClient(+Impl)·TourErrorCode(T001~T003)·dto/TourApiItem·TourApiResult (실시간, 캐시 없음) → docs/external.md §2
+   ├─ congestion                              # 관광지 집중률(당일 혼잡도) 외부연동 — CongestionClient(+Impl)·CongestionService(+Impl)·dto/CongestionRate. 시군구 1콜, 매 요청 실시간(저장·캐시 없음), 실패는 빈 맵(목록 200 유지). 에러코드는 TourErrorCode 재사용 → docs/external.md §2-1
    ├─ init                                    # SeedDataInitializer, SpotSeedLoader, FishContentSeedLoader, InlandDetailSeedLoader, SeedDataReader (+dto) — 스팟/어종/담수 상세 시드 적재
    └─ exception
       ├─ model/BaseErrorCode.java             # 에러 코드 인터페이스 (code/message/status)
@@ -246,6 +248,7 @@ public class SpotController implements SpotControllerSpec {
 | `jwt` | JWT 발급·검증(`JwtProvider`)·인증 필터(`JwtAuthenticationFilter`) | ✅ |
 | `forecast` | 바다낚시지수 예보 외부연동 — `FishingIndexClient`(+Impl)·`ForecastService`(+Impl)·`dto/SpotForecast`. 전체 예보를 Redis 12h 캐시 후 스팟명으로 필터 → docs/external.md §1 | ✅ |
 | `tour` | 관광 정보(TourAPI KorService2) 외부연동 — `TourApiClient`(+Impl)·`TourErrorCode`·`dto/TourApiItem`·`TourApiResult`. 위치기반 관광 장소를 **매 요청 실시간 호출**(캐시·DB 없음) → docs/external.md §2 | ✅ |
+| `congestion` | 관광지 집중률(당일 혼잡도) 외부연동 — `CongestionClient`(+`Impl`)·`CongestionService`(+`Impl`)·`dto/CongestionRate`. 시군구 단위 1콜, **매 요청 실시간(저장·캐시 없음 — 공모전 규칙)**, 실패는 빈 맵으로 삼켜 관광 목록 200 유지. 에러 코드는 `TourErrorCode` 재사용 → docs/external.md §2-1 | ✅ |
 | `ai` | 어종 분류 모델 서버 연동 — `FishClassifyClient`(+`Impl`)·`AiErrorCode`·`dto/PredictResponse`. multipart 로 원본 바이트 전송, 4xx 무재시도 / 5xx·타임아웃 1회 재시도 → docs/external.md §2 | ✅ |
 | `image` | 도감 이미지(어종·그림자·도감 외 어종 기본) URL 제공 — `FishImageService`(+`Impl`). **DB 컬럼이 아니라 어종 id로 파일명을 규칙 생성**하고, 파일은 `data/fish/images/`에 두어 `ImageResourceConfig`가 `/images/fish/**`로 정적 서빙한다 (→ docs/media.md §0) | ✅ |
 | `s3` | S3 업로드 서비스·경로·에러 코드 (`S3Service`+`Impl`·`PathName`·`S3ErrorCode`, AWS SDK v2, 서버 경유 업로드). 프로필(`profile/`)·어종 인증(`fish/`)·도감 외 어종(`custom-fish/`) 사진 적용 (docs/media.md) | ✅ |
