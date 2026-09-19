@@ -30,6 +30,20 @@ public interface TourControllerSpec {
           - 인증 불필요(공개).
           - 이미지·상세주소가 없는 장소는 `firstImage`/`firstImage2`/`addr2`가 `null`입니다.
 
+          ### 당일 혼잡도(congestion)
+          - `type=관광지`일 때, 각 항목에 **그날 예상 혼잡도**를 함께 내려줍니다.
+            한국관광공사 관광지 집중률 방문자 추이 예측(data.go.kr 15128555)을 장소명으로 조인합니다.
+          - `rate`: 집중률 지수 **0~100**. 퍼센트가 아니라 2018년 이후 피크를 100으로 정규화한 상대 지수입니다.
+          - `level`: `여유`(50 미만) / `보통`(50~80) / `혼잡`(80 이상).
+          - `baseDate`: 예측 기준일(조회 당일, `yyyy-MM-dd`).
+          - **`congestion`은 `null`일 수 있습니다.** 화면은 이때 혼잡도 칩을 숨기세요(0으로 표시 금지).
+            - `숙박`·`음식점` — 집중률 데이터셋이 관광지만 다룸(항상 `null`)
+            - 데이터셋에 없는 장소 — 항·포구(격포항 등)·리조트·신규시설 다수
+              **값이 붙는 비율은 전국 평균 약 44%**(전남 제외 53%)이고 지역 편차가 큽니다(0~100%).
+              도심일수록 낮고(해운대 16%) 어촌일수록 높습니다(기장 100%·대천항 86%).
+            - **전남 전역** — 데이터셋에 해당 지역이 없음
+            - 집중률 API 장애·쿼터 소진 — 이 경우에도 목록 응답은 **200**을 유지합니다
+
           ### ⚠ 예외상황
           - `INVALID_TYPE(400)`: 지원하지 않는 카테고리(`type`)
           - `TOUR_API_ERROR(502)`: TourAPI 응답 오류(쿼터 초과·비정상 응답 등)
@@ -51,20 +65,35 @@ public interface TourControllerSpec {
                               "code": 200,
                               "message": "요청이 성공적으로 처리되었습니다.",
                               "data": {
-                                "type": "음식점",
+                                "type": "관광지",
                                 "page": 1,
                                 "numOfRows": 30,
-                                "totalCount": 128,
+                                "totalCount": 41,
                                 "hasNext": true,
                                 "items": [
                                   {
-                                    "title": "해운대암소갈비집",
+                                    "title": "채석강",
                                     "firstImage": "http://tong.visitkorea.or.kr/cms/image1.jpg",
                                     "firstImage2": "http://tong.visitkorea.or.kr/cms/thumb1.jpg",
-                                    "addr1": "부산광역시 해운대구 중동2로10번길 32-10",
+                                    "addr1": "전북특별자치도 부안군 변산면 격포리",
                                     "addr2": null,
-                                    "mapX": 129.1626,
-                                    "mapY": 35.1631
+                                    "mapX": 126.4699,
+                                    "mapY": 35.6204,
+                                    "congestion": {
+                                      "rate": 39.6,
+                                      "level": "여유",
+                                      "baseDate": "2026-09-19"
+                                    }
+                                  },
+                                  {
+                                    "title": "격포항",
+                                    "firstImage": "http://tong.visitkorea.or.kr/cms/image2.jpg",
+                                    "firstImage2": "http://tong.visitkorea.or.kr/cms/thumb2.jpg",
+                                    "addr1": "전북특별자치도 부안군 변산면 격포리",
+                                    "addr2": null,
+                                    "mapX": 126.4633,
+                                    "mapY": 35.6167,
+                                    "congestion": null
                                   }
                                 ]
                               }
@@ -94,7 +123,7 @@ public interface TourControllerSpec {
                             """)))
   })
   BaseResponse<NearbyTourResponse> getNearbyTours(
-      @Schema(description = "카테고리(관광지/숙박/음식점)", example = "음식점") String type,
+      @Schema(description = "카테고리(관광지/숙박/음식점)", example = "관광지") String type,
       @Schema(description = "위도", example = "35.1587") double lat,
       @Schema(description = "경도", example = "129.1603") double lng,
       @Schema(description = "반경(m), 기본 5000, 최대 20000", example = "5000") int radius,

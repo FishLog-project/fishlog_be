@@ -24,14 +24,13 @@ public record NearbyTourResponse(
     @Schema(example = "true") boolean hasNext,
     List<TourSpotResponse> items) {
 
-  public static NearbyTourResponse of(TourCategory category, TourApiResult result) {
+  /**
+   * @param items 혼잡도까지 조립이 끝난 장소 목록(거리순). 혼잡도 결합은 외부 조회가 얽혀 있어 서비스가 맡고, 이 DTO는 페이지 메타만 계산한다.
+   */
+  public static NearbyTourResponse of(
+      TourCategory category, TourApiResult result, List<TourSpotResponse> items) {
     boolean hasNext = (long) result.pageNo() * result.numOfRows() < result.totalCount();
     return new NearbyTourResponse(
-        category.label(),
-        result.pageNo(),
-        result.numOfRows(),
-        result.totalCount(),
-        hasNext,
-        result.items().stream().map(TourSpotResponse::from).toList());
+        category.label(), result.pageNo(), result.numOfRows(), result.totalCount(), hasNext, items);
   }
 }
